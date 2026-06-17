@@ -1,0 +1,293 @@
+/* =========================================================
+   v68e Final Halloween Contrast Polish
+   Scope: contrast/color only. No layout changes.
+   ========================================================= */
+
+html.halloween,
+html.halloween.rainstorm {
+  --v68e-dark: #1a0715;
+  --v68e-dark-2: #2a0b1f;
+  --v68e-card: rgba(42, 11, 31, 0.78);
+  --v68e-card-2: rgba(67, 20, 7, 0.56);
+  --v68e-border: rgba(251, 146, 60, 0.36);
+  --v68e-text: #fff7ed;
+  --v68e-muted: #fed7aa;
+  --v68e-soft: rgba(254, 215, 170, 0.82);
+  --v68e-orange: #fdba74;
+  --v68e-orange-2: #fb923c;
+  --v68e-purple: #a855f7;
+}
+
+/* Strong text contrast everywhere under Halloween */
+html.halloween #root {
+  color: var(--v68e-text) !important;
+}
+
+html.halloween #root :is(h1, h2, h3, h4, h5, h6) {
+  color: #ffffff !important;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.46);
+}
+
+html.halloween #root :is(p, span, small, label, li, strong, b, em, div) {
+  color: inherit;
+}
+
+/* Make product/category/card descendants readable */
+html.halloween #root :is(
+  .card,
+  .categoryCard,
+  .productCard,
+  .serviceCard,
+  .checkoutCard,
+  .invoiceCard,
+  .orderCard,
+  .paymentCard,
+  .detailCard,
+  .summaryCard,
+  .historyCard,
+  .methodCard,
+  .statusBox,
+  .timeline,
+  [class*="Card"],
+  [class*="card"]
+) {
+  color: var(--v68e-text) !important;
+}
+
+/* Product/category names */
+html.halloween #root :is(
+  .categoryCard,
+  .productCard,
+  .serviceCard,
+  .category-item,
+  .product-item,
+  .service-item,
+  [class*="category"],
+  [class*="product"],
+  [class*="service"]
+) :is(h1, h2, h3, h4, h5, h6, strong, b, a, [class*="title" i], [class*="name" i], [class*="label" i]) {
+  color: #ffffff !important;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.48);
+}
+
+/* Product/category descriptions */
+html.halloween #root :is(
+  .categoryCard,
+  .productCard,
+  .serviceCard,
+  .category-item,
+  .product-item,
+  .service-item,
+  [class*="category"],
+  [class*="product"],
+  [class*="service"]
+) :is(p, small, .desc, .description, .subtitle, .muted, [class*="desc" i], [class*="subtitle" i], [class*="muted" i]) {
+  color: var(--v68e-muted) !important;
+}
+
+/* Hero/banner CTA contrast */
+html.halloween #root :is(.hero, .heroCard, .promo, .promoBanner, .banner) {
+  color: var(--v68e-text) !important;
+}
+
+html.halloween #root :is(.hero, .heroCard, .promo, .promoBanner, .banner) * {
+  color: inherit;
+}
+
+html.halloween #root :is(.hero, .heroCard, .promo, .promoBanner, .banner) :is(h1, h2, h3, strong, b) {
+  color: #ffffff !important;
+}
+
+html.halloween #root :is(.hero, .heroCard, .promo, .promoBanner, .banner) :is(a, button, .btn, .button) {
+  color: #1a0715 !important;
+  background: linear-gradient(135deg, #fdba74, #fb923c) !important;
+  border-color: rgba(255, 247, 237, 0.42) !important;
+  text-shadow: none !important;
+}
+
+/* Product choose buttons: fix white button + white text */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"],
+  [class*="product"]
+) :is(button, a, .btn, .button, [class*="button" i], [class*="btn" i]) {
+  color: #1a0715 !important;
+  background: linear-gradient(135deg, #fff7ed, #fdba74) !important;
+  border-color: rgba(251, 146, 60, 0.52) !important;
+  text-shadow: none !important;
+  font-weight: 900 !important;
+}
+
+/* Checkout/payment/invoice primary buttons stay strong */
+html.halloween #root :is(
+  .checkoutCard,
+  .invoiceCard,
+  .paymentCard,
+  .summaryCard,
+  [class*="checkout"],
+  [class*="invoice"],
+  [class*="payment"]
+) :is(button, a, .btn, .button) {
+  color: #fff7ed !important;
+  background: linear-gradient(135deg, #ea580c, #7e22ce) !important;
+  border-color: rgba(253, 186, 116, 0.44) !important;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.34) !important;
+}
+
+/* Step/tutorial/process cards that are still white */
+html.halloween #root :is(
+  .stepCard,
+  .processCard,
+  .flowCard,
+  .guideCard,
+  .tutorialCard,
+  [class*="step" i],
+  [class*="process" i],
+  [class*="flow" i],
+  [class*="guide" i],
+  [class*="tutorial" i]
+) {
+  color: var(--v68e-text) !important;
+  background:
+    linear-gradient(135deg, rgba(42, 11, 31, 0.88), rgba(67, 20, 7, 0.66)) !important;
+  border-color: var(--v68e-border) !important;
+}
+
+html.halloween #root :is(
+  .stepCard,
+  .processCard,
+  .flowCard,
+  .guideCard,
+  .tutorialCard,
+  [class*="step" i],
+  [class*="process" i],
+  [class*="flow" i],
+  [class*="guide" i],
+  [class*="tutorial" i]
+) :is(h1, h2, h3, h4, p, span, small, div, strong, b) {
+  color: var(--v68e-text) !important;
+}
+
+html.halloween #root :is(
+  .stepCard,
+  .processCard,
+  .flowCard,
+  .guideCard,
+  .tutorialCard,
+  [class*="step" i],
+  [class*="process" i],
+  [class*="flow" i],
+  [class*="guide" i],
+  [class*="tutorial" i]
+) :is(p, small, .muted, .desc, .description, [class*="desc" i], [class*="muted" i]) {
+  color: var(--v68e-muted) !important;
+}
+
+/* Number bubble in step cards */
+html.halloween #root :is(
+  .stepCard,
+  .processCard,
+  .flowCard,
+  .guideCard,
+  .tutorialCard,
+  [class*="step" i],
+  [class*="process" i],
+  [class*="flow" i],
+  [class*="guide" i],
+  [class*="tutorial" i]
+) :is(.number, .index, [class*="number" i], [class*="index" i]) {
+  color: #1a0715 !important;
+  background: #fef08a !important;
+  border-color: rgba(255, 247, 237, 0.5) !important;
+}
+
+/* Top quick access labels */
+html.halloween #root :is(
+  .quickAccess,
+  .quickGrid,
+  .categoryGrid,
+  .categoriesGrid,
+  .serviceGrid,
+  .servicesGrid,
+  [class*="quick" i],
+  [class*="categoryGrid" i],
+  [class*="categoriesGrid" i],
+  [class*="serviceGrid" i],
+  [class*="servicesGrid" i]
+) :is(a, button, div, span, p, small, strong, b) {
+  color: var(--v68e-text) !important;
+}
+
+/* Links like "Lihat semua" */
+html.halloween #root :is(a, [class*="link" i]) {
+  color: var(--v68e-orange) !important;
+}
+
+html.halloween #root :is(a:hover, [class*="link" i]:hover) {
+  color: #fff7ed !important;
+}
+
+/* Price and SKU */
+html.halloween #root :is(
+  .price,
+  .amount,
+  .total,
+  .grandTotal,
+  .paymentTotal,
+  [class*="price" i],
+  [class*="amount" i],
+  [class*="total" i]
+) {
+  color: var(--v68e-orange) !important;
+  text-shadow: 0 0 16px rgba(251, 146, 60, 0.22);
+}
+
+html.halloween #root :is(.sku, [class*="sku" i]) {
+  color: var(--v68e-soft) !important;
+}
+
+/* Badges/chips */
+html.halloween #root :is(
+  .badge,
+  .statusBadge,
+  .paymentStatus,
+  .orderStatus,
+  .chip,
+  [class*="badge" i],
+  [class*="chip" i],
+  [class*="status" i]
+) {
+  color: #1a0715 !important;
+  background: linear-gradient(135deg, #fff7ed, #fdba74) !important;
+  border-color: rgba(251, 146, 60, 0.48) !important;
+  text-shadow: none !important;
+}
+
+/* Keep nav normal readable */
+html.halloween #root :is(header, .header, .siteHeader, .navbar, .topbar) :is(a, button, span, p, small, div) {
+  color: #fff7ed !important;
+}
+
+/* Current active nav pill */
+html.halloween #root :is(header, .header, .siteHeader, .navbar, .topbar) :is(.active, [aria-current="page"]) {
+  color: #1a0715 !important;
+  background: linear-gradient(135deg, #fdba74, #fb923c) !important;
+}
+
+/* Forms remain readable */
+html.halloween #root :is(input, select, textarea) {
+  color: #111827 !important;
+  background: rgba(255, 247, 237, 0.96) !important;
+}
+
+html.halloween #root :is(input::placeholder, textarea::placeholder) {
+  color: rgba(17, 24, 39, 0.54) !important;
+}
+
+/* Floating Halloween toggle */
+.v68-halloween-toggle,
+.v68-halloween-toggle * {
+  color: #fff7ed !important;
+}

@@ -1,0 +1,226 @@
+/* =========================================================
+   v68h Remove White Product Panels
+   Scope: Halloween product visual panels only.
+   No layout changes.
+   ========================================================= */
+
+html.halloween #root {
+  --v68h-panel-1: rgba(49, 15, 36, 0.96);
+  --v68h-panel-2: rgba(67, 20, 7, 0.82);
+  --v68h-panel-3: rgba(124, 45, 18, 0.42);
+  --v68h-border: rgba(251, 146, 60, 0.32);
+  --v68h-text: #ffedd5;
+  --v68h-muted: rgba(254, 215, 170, 0.72);
+  --v68h-accent: #fdba74;
+}
+
+/* Product card base stays Halloween dark */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) {
+  color: var(--v68h-text) !important;
+  background:
+    radial-gradient(circle at 85% 0%, rgba(251, 146, 60, 0.12), transparent 42%),
+    linear-gradient(145deg, rgba(42, 11, 31, 0.98), rgba(58, 19, 15, 0.90)) !important;
+  border-color: var(--v68h-border) !important;
+}
+
+/* Target all likely product visual blocks */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(
+  .thumb,
+  .thumbnail,
+  .image,
+  .imageBox,
+  .productImage,
+  .productThumb,
+  .productVisual,
+  .productMedia,
+  .productArt,
+  .visual,
+  .media,
+  .art,
+  .avatar,
+  .logo,
+  [class*="thumb" i],
+  [class*="image" i],
+  [class*="visual" i],
+  [class*="media" i],
+  [class*="art" i],
+  [class*="avatar" i],
+  [class*="logo" i]
+) {
+  color: var(--v68h-accent) !important;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(253, 186, 116, 0.22), transparent 34%),
+    radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.18), transparent 44%),
+    linear-gradient(135deg, var(--v68h-panel-1), var(--v68h-panel-2)) !important;
+  border-color: rgba(253, 186, 116, 0.24) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 237, 213, 0.08),
+    0 10px 24px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* Fallback: top large visual block inside product card */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) > :is(div, figure, picture):first-child {
+  color: var(--v68h-accent) !important;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(253, 186, 116, 0.20), transparent 34%),
+    radial-gradient(circle at 82% 18%, rgba(168, 85, 247, 0.16), transparent 44%),
+    linear-gradient(135deg, var(--v68h-panel-1), var(--v68h-panel-2)) !important;
+  border-color: rgba(253, 186, 116, 0.22) !important;
+}
+
+/* If the white panel is nested one level deeper */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) > :is(div, figure, picture):first-child > :is(div, span, figure, picture) {
+  color: var(--v68h-accent) !important;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(253, 186, 116, 0.22), transparent 36%),
+    linear-gradient(135deg, rgba(67, 20, 7, 0.86), rgba(49, 15, 36, 0.92)) !important;
+  border-color: rgba(253, 186, 116, 0.22) !important;
+}
+
+/* Initial letters inside visual panel */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(
+  .thumb,
+  .thumbnail,
+  .image,
+  .imageBox,
+  .productImage,
+  .productThumb,
+  .productVisual,
+  .productMedia,
+  .productArt,
+  .visual,
+  .media,
+  .art,
+  .avatar,
+  .logo,
+  [class*="thumb" i],
+  [class*="image" i],
+  [class*="visual" i],
+  [class*="media" i],
+  [class*="art" i],
+  [class*="avatar" i],
+  [class*="logo" i]
+) * {
+  color: var(--v68h-accent) !important;
+  text-shadow: 0 0 12px rgba(251, 146, 60, 0.20) !important;
+}
+
+/* Remove harsh white from any product child using white-ish background */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(div, span, figure, picture) {
+  border-color: rgba(251, 146, 60, 0.22);
+}
+
+/* Buttons stay dark pumpkin, not white */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(button, a, .btn, .button, [class*="button" i], [class*="btn" i]) {
+  color: #ffedd5 !important;
+  background:
+    linear-gradient(135deg, rgba(124, 45, 18, 0.96), rgba(194, 65, 12, 0.82)) !important;
+  border-color: rgba(253, 186, 116, 0.30) !important;
+  box-shadow:
+    0 5px 0 rgba(0, 0, 0, 0.70),
+    0 12px 24px rgba(0, 0, 0, 0.22) !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.28) !important;
+}
+
+/* Badges no longer white */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(
+  .badge,
+  .chip,
+  .statusBadge,
+  [class*="badge" i],
+  [class*="chip" i],
+  [class*="status" i],
+  [class*="promo" i],
+  [class*="ready" i]
+) {
+  color: #ffedd5 !important;
+  background:
+    linear-gradient(135deg, rgba(251, 146, 60, 0.18), rgba(168, 85, 247, 0.14)) !important;
+  border-color: rgba(253, 186, 116, 0.26) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* Product text warm and readable */
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(h1, h2, h3, h4, strong, b, [class*="name" i], [class*="title" i], [class*="brand" i]) {
+  color: #fff7ed !important;
+}
+
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(small, .sku, [class*="sku" i], .muted, [class*="muted" i]) {
+  color: var(--v68h-muted) !important;
+}
+
+html.halloween #root :is(
+  .productCard,
+  .product-item,
+  [class*="productCard"],
+  [class*="product-card"]
+) :is(.price, [class*="price" i], .amount, [class*="amount" i]) {
+  color: var(--v68h-accent) !important;
+}
+
+/* Search/filter inputs: dark theme, not white */
+html.halloween #root :is(input, select, textarea) {
+  color: #ffedd5 !important;
+  background: rgba(26, 7, 21, 0.74) !important;
+  border-color: rgba(251, 146, 60, 0.30) !important;
+}
+
+html.halloween #root :is(input::placeholder, textarea::placeholder) {
+  color: rgba(254, 215, 170, 0.58) !important;
+}
+
+html.halloween #root select option {
+  color: #111827 !important;
+  background: #ffedd5 !important;
+}

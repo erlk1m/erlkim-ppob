@@ -1,0 +1,994 @@
+import './v68b-halloween-toggle-fix';
+import './styles/v68b-halloween-toggle-fix.css';
+import './styles/v68c-theme-text-sync.css';
+import './styles/v68a-halloween-theme-safe.css';
+import './checkoutConfirmGuard';
+import './storeTestingHelper';
+import './webMaintenanceMode';
+import './testingModeBadge';
+import { QRCodeSVG } from 'qrcode.react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { Link, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router';
+import { api, Category, Order, PaymentMethod, Product, rupiah } from './api';
+
+function maskCustomerName(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '-';
+
+  const words = raw
+    .split(/\s+/)
+    .filter(Boolean)
+    // Hide generic Digiflazz testing prefix: "Nama Pelanggan Pertama" -> "Pelan**** Pert****"
+    .filter((word, index) => !(index === 0 && /^nama$/i.test(word)));
+
+  if (!words.length) return '-';
+
+  return words
+    .map((word, index) => {
+      const clean = word.replace(/[^\p{L}\p{N}]/gu, '');
+      if (!clean) return '****';
+      const keep = index === 0 ? Math.min(5, clean.length) : Math.min(4, clean.length);
+      return clean.slice(0, keep) + '****';
+    })
+    .join(' ');
+}
+
+function getPaymentChannelLabel(order: any, paymentMethod?: any): string {
+  const paymentMethodId = String(order?.paymentMethod || order?.paymentMethodId || paymentMethod?.id || '').toLowerCase();
+  const provider = String(order?.paymentProvider || paymentMethod?.provider || '').toLowerCase();
+
+  if (provider.includes('midtrans') || paymentMethodId.includes('midtrans')) return 'Midtrans';
+  if (paymentMethodId.includes('manual') || provider.includes('manual_qris')) return 'Manual QRIS';
+  return paymentMethod?.name || order?.paymentMethod || order?.paymentMethodId || '-';
+}
+
+function isMidtransPaymentMethod(method?: PaymentMethod | null) {
+  const id = String(method?.id || '').toLowerCase();
+  const provider = String(method?.provider || '').toLowerCase();
+  return provider === 'midtrans' || id.includes('midtrans');
+}
+
+function preferredPaymentMethodId(methods: PaymentMethod[]) {
+  return methods.find(isMidtransPaymentMethod)?.id || methods[0]?.id || 'manual-qris';
+}
+
+function paymentMethodDisplayName(method?: PaymentMethod | null) {
+  if (!method) return 'Metode pembayaran';
+  return isMidtransPaymentMethod(method) ? 'Midtrans' : method.name;
+}
+
+function displayMidtransStatus(value?: string) {
+  const status = String(value || 'payment_created').toLowerCase();
+  if (status === 'snap_created' || status === 'payment_created') return 'payment_created';
+  return status;
+}
+
+
+type PublicSettings = {
+  site: {
+    brandName?: string;
+    heroTitle?: string;
+    heroSubtitle?: string;
+    runningText?: string;
+    footerText?: string;
+    whatsappNumber?: string;
+  };
+  theme: Record<string, unknown>;
+  paymentMethods: PaymentMethod[];
+};
+
+type OrderResponse = { order: Order; events?: Array<{ id: string; type: string; message?: string; createdAt: string }> };
+
+type WeatherModeV65 = 'normal' | 'rainstorm';
+
+function useFetch<T>(path: string, fallback: T) {
+  const [data, setData] = useState<T>(fallback);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    api<T>(path)
+      .then((value) => mounted && setData(value))
+      .catch((e) => mounted && setError(e.message || 'Gagal memuat data'))
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, [path]);
+
+  return { data, loading, error, setData };
+}
+
+export default function App() {
+  const { data: settings } = useFetch<PublicSettings>('/settings/public', { site: {}, theme: {}, paymentMethods: [] });
+  const brand = settings.site?.brandName || 'ERLKIM PULSA';
+  const [weatherMode, setWeatherMode] = useState<WeatherModeV65>(() => {
+    if (typeof window === 'undefined') return 'normal';
+    return window.localStorage.getItem('erlkim-weather-mode') === 'rainstorm' ? 'rainstorm' : 'normal';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('rainstorm');
+
+    if (weatherMode === 'rainstorm') {
+      root.classList.add('rainstorm');
+    }
+
+    try {
+      window.localStorage.setItem('erlkim-weather-mode', weatherMode);
+    } catch {}
+
+    return () => {
+      root.classList.remove('rainstorm');
+    };
+  }, [weatherMode]);
+
+  return (
+    <div className={`appShell weatherMode-${weatherMode}`}>
+      <Header
+        brand={brand}
+        whatsapp={settings.site?.whatsappNumber}
+        weatherMode={weatherMode}
+        onToggleWeather={() => setWeatherMode((mode) => mode === 'rainstorm' ? 'normal' : 'rainstorm')}
+      />
+      <WeatherLayerV65 mode={weatherMode} />
+      {settings.site?.runningText && <div className="running"><span>{settings.site.runningText}</span></div>}
+      <main>
+        <Routes>
+          <Route path="/" element={<Home settings={settings} />} />
+          <Route path="/produk" element={<Products />} />
+          <Route path="/checkout/:id" element={<Checkout />} />
+          <Route path="/tagihan" element={<Bills />} />
+          <Route path="/invoice/:invoice" element={<Invoice />} />
+          <Route path="/cek-pesanan" element={<CheckOrder />} />
+          <Route path="/bantuan" element={<Support whatsapp={settings.site?.whatsappNumber} />} />
+        </Routes>
+      </main>
+      <Footer text={settings.site?.footerText} whatsapp={settings.site?.whatsappNumber} />
+      <MobileBottomNav />
+    </div>
+  );
+}
+
+
+function WeatherLayerV65({ mode }: { mode: WeatherModeV65 }) {
+  if (mode !== 'rainstorm') return null;
+
+  const drops = Array.from({ length: 44 }, (_, index) => {
+    const left = (index * 17) % 106 - 3;
+    const delay = ((index * 13) % 23) / 10;
+    const duration = 0.72 + ((index * 7) % 8) / 20;
+    const thick = index % 7 === 0;
+
+    return (
+      <span
+        key={index}
+        className={thick ? 'rainDropV65 thick' : 'rainDropV65'}
+        style={{
+          left: `${left}%`,
+          animationDelay: `${delay}s`,
+          animationDuration: `${duration}s`,
+        }}
+      />
+    );
+  });
+
+  return (
+    <div className="weatherLayerV65" aria-hidden="true">
+      <div className="stormFlashV65" />
+      <span className="stormCloudV65 cloudA" />
+      <span className="stormCloudV65 cloudB" />
+      <span className="stormCloudV65 cloudC" />
+      <span className="lightningBoltV65 boltA" />
+      <span className="lightningBoltV65 boltB" />
+      <div className="rainDropsV65">{drops}</div>
+    </div>
+  );
+}
+
+
+function Header({ brand, whatsapp, weatherMode, onToggleWeather }: { brand: string; whatsapp?: string; weatherMode: WeatherModeV65; onToggleWeather: () => void }) {
+  const [open, setOpen] = useState(false);
+  const menu = [
+    ['/', 'Beranda'],
+    ['/produk', 'Produk'],
+    ['/tagihan', 'Tagihan'],
+    ['/cek-pesanan', 'Cek Pesanan'],
+    ['/bantuan', 'Bantuan']
+  ];
+
+  return (
+    <header className="siteHeader">
+      <Link to="/" className="brand" onClick={() => setOpen(false)}>
+        <span className="logoMark">EP</span>
+        <span><b>{brand}</b><small>PPOB Digital</small></span>
+      </Link>
+
+      <nav className={open ? 'desktopNav open' : 'desktopNav'} aria-label="Navigasi utama">
+        {menu.map(([to, label]) => <NavLink key={to} to={to} onClick={() => setOpen(false)}>{label}</NavLink>)}
+      </nav>
+
+      <div className="headerActions">
+        {whatsapp && <a className="btn mini ghost desktopOnly" href={`https://wa.me/${whatsapp}`}>WhatsApp</a>}
+        <button
+          className={weatherMode === 'rainstorm' ? 'weatherToggle active' : 'weatherToggle'}
+          type="button"
+          aria-label={weatherMode === 'rainstorm' ? 'Matikan mode hujan petir' : 'Aktifkan mode hujan petir'}
+          onClick={onToggleWeather}
+        >
+          {weatherMode === 'rainstorm' ? '☀️ Normal' : '🌧️ Hujan'}
+        </button>
+        <button className="hamburger" type="button" aria-label="Buka menu" onClick={() => setOpen((v) => !v)}>{open ? '×' : '☰'}</button>
+      </div>
+    </header>
+  );
+}
+
+function MobileBottomNav() {
+  const items = [
+    { to: '/', icon: '⌂', label: 'Beranda' },
+    { to: '/produk', icon: '▦', label: 'Produk' },
+    { to: '/produk', icon: '+', label: 'Beli', primary: true },
+    { to: '/tagihan', icon: '☑', label: 'Tagihan' },
+    { to: '/cek-pesanan', icon: '⌕', label: 'Cek' }
+  ];
+
+  return (
+    <nav className="bottomNav" aria-label="Navigasi mobile">
+      {items.map((item, index) => (
+        <NavLink
+          key={`${item.to}-${index}`}
+          to={item.to}
+          className={({ isActive }) => [!item.primary && isActive ? 'active' : '', item.primary ? 'primaryAction' : ''].filter(Boolean).join(' ')}
+        >
+          <span>{item.icon}</span>
+          {item.label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+function Home({ settings }: { settings: PublicSettings }) {
+  const { data: categories, loading: loadingCategories } = useFetch<Category[]>('/categories?audience=storefront', []);
+  const { data: popular } = useFetch<Product[]>('/products?audience=storefront&popular=true&dedupe=true', []);
+  const { data: flashsale } = useFetch<Product[]>('/products?audience=storefront&flashsale=true&dedupe=true', []);
+
+  return (
+    <section className="page homePage">
+      <div className="heroGrid">
+        <div className="heroCard">
+          <h1>{settings.site?.heroTitle || 'Top Up & Bayar Tagihan Lebih Mudah'}</h1>
+          <p>{settings.site?.heroSubtitle || 'Pilih produk, masukkan nomor tujuan, lalu bayar lewat QRIS atau Midtrans dengan invoice otomatis.'}</p>
+          <div className="heroMeta">
+            <span>⚡ Harga dari API</span>
+            <span>🔒 Invoice aman</span>
+            <span>📱 Mobile-first</span>
+          </div>
+          <div className="actions">
+            <Link className="btn primary" to="/produk">Mulai Beli</Link>
+            <Link className="btn ghost" to="/tagihan">Cek Tagihan</Link>
+          </div>
+        </div>
+      </div>
+
+      <ServiceStories categories={categories} />
+      <SoftTopicCards />
+
+      <SectionTitle title="Kategori Produk" action={<Link to="/produk">Lihat semua</Link>} />
+      {loadingCategories ? <SkeletonGrid /> : <CategoryGrid categories={categories} />}
+
+      <SectionTitle title="Produk Terpopuler" action={<Link to="/produk">Semua produk</Link>} />
+      <ProductGrid products={popular.slice(0, 8)} />
+
+      <section className="promoBand">
+        <div>
+          <span className="eyebrow">Promo</span>
+          <h2>Flashsale dan produk highlight</h2>
+        </div>
+        <Link className="btn ghost" to="/produk">Belanja Sekarang</Link>
+      </section>
+      <ProductGrid products={flashsale.slice(0, 4)} flash />
+
+      <HowItWorks />
+    </section>
+  );
+}
+
+function CategoryGrid({ categories }: { categories: Category[] }) {
+  if (!categories.length) return <EmptyState title="Kategori belum tersedia" text="Jalankan API dan sync produk terlebih dahulu." />;
+
+  return (
+    <div className="categoryGrid">
+      {categories.map((cat) => (
+        <Link className="categoryCard" key={cat.id} to={cat.type === 'postpaid' ? '/tagihan' : `/produk?category=${cat.slug}`}>
+          <span className="catIcon">{cat.icon}</span>
+          <b>{cat.name}</b>
+          <small>{cat.description}</small>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function ServiceStories({ categories }: { categories: Category[] }) {
+  const fallback = [
+    { id: 'pulsa', name: 'Pulsa', icon: '📱', slug: 'pulsa', type: 'prepaid' },
+    { id: 'data', name: 'Paket Data', icon: '🌐', slug: 'paket-data', type: 'prepaid' },
+    { id: 'pln', name: 'Tagihan', icon: '⚡', slug: 'tagihan', type: 'postpaid' },
+    { id: 'game', name: 'Game', icon: '🎮', slug: 'topup-game', type: 'prepaid' },
+    { id: 'emoney', name: 'E-Wallet', icon: '💳', slug: 'emoney', type: 'prepaid' }
+  , 'paket-sms-telpon', 'masa-aktif', 'aktivasi-perdana', 'aktivasi-voucher', 'esim', 'streaming', 'tv'];
+  const items = (categories.length ? categories : fallback).slice(0, 8);
+
+  return (
+    <section className="storySection" aria-label="Akses cepat layanan">
+      <div className="storyHead">
+        <h2>Akses cepat</h2>
+        <Link to="/produk">Lihat semua →</Link>
+      </div>
+      <div className="storyRail">
+        {items.map((cat: any, index) => (
+          <Link className={`storyBubble tone${(index % 4) + 1}`} key={cat.id} to={cat.type === 'postpaid' ? '/tagihan' : `/produk?category=${cat.slug}`}>
+            <span>{cat.icon}</span>
+            <b>{cat.name}</b>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SoftTopicCards() {
+  return (
+    <section className="softTopic" aria-label="Highlight layanan">
+      <div className="softTopicHead">
+        <h2>Pilih layanan favorit</h2>
+        <Link to="/produk">Deep dive →</Link>
+      </div>
+      <div className="softTopicRail">
+        <Link to="/produk" className="softTopicCard green">
+          <span className="softMeta">Cepat · Invoice otomatis</span>
+          <h3>Pulsa, data, e-wallet dalam satu checkout</h3>
+          <small><span>⚡</span> Produk Prepaid</small>
+        </Link>
+        <Link to="/tagihan" className="softTopicCard orange">
+          <span className="softMeta">Inquiry · Bayar Midtrans/QRIS</span>
+          <h3>Cek PLN, BPJS, PDAM, dan tagihan lain</h3>
+          <small><span>🧾</span> Pascabayar</small>
+        </Link>
+        <Link to="/cek-pesanan" className="softTopicCard purple">
+          <span className="softMeta">Tracking · Status order</span>
+          <h3>Cek invoice dan status transaksi pelanggan</h3>
+          <small><span>🔎</span> Cek Pesanan</small>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+
+const PRODUCT_BRAND_FILTERS: Record<string, string[]> = {
+  pulsa: ['TELKOMSEL', 'INDOSAT', 'XL', 'AXIS', 'TRI', 'SMARTFREN', 'BY.U'],
+  'paket-data': ['TELKOMSEL', 'INDOSAT', 'XL', 'AXIS', 'TRI', 'SMARTFREN', 'BY.U'],
+  'token-pln': ['PLN'],
+  emoney: ['DANA', 'OVO', 'GO PAY', 'SHOPEE PAY', 'LINKAJA', 'DOKU', 'I.SAKU'],
+  'voucher-game': ['FREE FIRE', 'MOBILE LEGENDS', 'GOOGLE PLAY', 'PLAYSTATION']
+};
+
+function productBrandOptions(category: string) {
+  if (category && PRODUCT_BRAND_FILTERS[category]) return PRODUCT_BRAND_FILTERS[category];
+  return ['TELKOMSEL', 'INDOSAT', 'XL', 'AXIS', 'TRI', 'SMARTFREN', 'BY.U', 'DANA', 'OVO', 'GO PAY'];
+}
+
+function setProductParams(setParams: ReturnType<typeof useSearchParams>[1], next: Record<string, string>) {
+  const clean = Object.fromEntries(Object.entries(next).filter(([, value]) => Boolean(value)));
+  setParams(clean);
+}
+
+function Products() {
+  const [params, setParams] = useSearchParams();
+  const category = params.get('category') || '';
+  const brand = params.get('brand') || '';
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('price_asc');
+  const { data: categories } = useFetch<Category[]>('/categories?audience=storefront', []);
+  const query = `/products?audience=storefront&type=prepaid&category=${category}&brand=${encodeURIComponent(brand)}&search=${encodeURIComponent(search)}&sort=${sort}&dedupe=true`;
+  const { data: products, loading, error } = useFetch<Product[]>(query, []);
+
+  const activeCategory = categories.find((cat) => cat.slug === category);
+  const brandOptions = productBrandOptions(category);
+
+  return (
+    <section className="page productsPage">
+      <PageHero
+        eyebrow="Produk Digital"
+        title={activeCategory ? activeCategory.name : 'Semua Produk'}
+        subtitle="Cari produk, filter kategori, pilih nominal, lalu lanjut ke checkout. Semua harga dibaca dari API/database."
+      />
+
+      <div className="categoryTabs" aria-label="Filter kategori">
+        <button className={!category ? 'active' : ''} onClick={() => setProductParams(setParams, {})}>Semua</button>
+        {categories.filter((c) => c.type !== 'postpaid').map((cat) => (
+          <button key={cat.slug} className={category === cat.slug ? 'active' : ''} onClick={() => setProductParams(setParams, { category: cat.slug })}>
+            <span>{cat.icon}</span>{cat.name}
+          </button>
+        ))}
+      </div>
+
+
+      <div className="brandTabs" aria-label="Filter brand">
+        <button className={!brand ? 'active' : ''} onClick={() => setProductParams(setParams, { category })}>Semua Brand</button>
+        {brandOptions.map((item) => (
+          <button key={item} className={brand === item ? 'active' : ''} onClick={() => setProductParams(setParams, { category, brand: item })}>{item}</button>
+        ))}
+      </div>
+
+      <div className="toolbar">
+        <input placeholder="Cari produk, brand, atau SKU" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="price_asc">Harga termurah</option>
+          <option value="price_desc">Harga termahal</option>
+        </select>
+      </div>
+
+      {error && <div className="alert danger">{error}</div>}
+      {loading ? <SkeletonGrid /> : <ProductGrid products={products} />}
+    </section>
+  );
+}
+
+function Checkout() {
+  const { id = '' } = useParams();
+  const navigate = useNavigate();
+  const { data: product, loading, error } = useFetch<Product | null>(`/products/${id}`, null);
+  const { data: paymentMethods } = useFetch<PaymentMethod[]>('/payment-methods', []);
+  const [customerNo, setCustomerNo] = useState('');
+  const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [message, setMessage] = useState('');
+  const selectedPayment = paymentMethods.find((item) => item.id === paymentMethodId) || paymentMethods[0];
+  const total = (product?.sellingPrice || 0) + (selectedPayment?.adminFee || 0);
+
+  useEffect(() => {
+    if (paymentMethods.length && !paymentMethods.some((item) => item.id === paymentMethodId)) {
+      setPaymentMethodId(preferredPaymentMethodId(paymentMethods));
+    }
+  }, [paymentMethods, paymentMethodId]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!product) return;
+    setMessage('');
+    try {
+      const result = await api<{ order: Order }>('/store/orders', {
+        method: 'POST',
+        body: JSON.stringify({ productId: product.id, customerNo, paymentMethodId: paymentMethodId || preferredPaymentMethodId(paymentMethods) })
+      });
+      navigate(`/invoice/${result.order.invoice}`);
+    } catch (error: any) {
+      setMessage(error.message || 'Gagal membuat invoice');
+    }
+  }
+
+  if (loading) return <section className="page narrow"><div className="skeleton">Memuat checkout...</div></section>;
+  if (error || !product) return <section className="page narrow"><div className="alert danger">{error || 'Produk tidak ditemukan'}</div></section>;
+
+  return (
+    <section className="page twoCol checkoutPage">
+      <div>
+        <PageHero eyebrow="Checkout" title="Selesaikan pesanan" subtitle="Input nomor tujuan dengan benar. Invoice dibuat unpaid dan transaksi baru dikirim setelah pembayaran paid." />
+        <form className="panel checkoutForm" onSubmit={submit}>
+          <label>Nomor HP / ID tujuan</label>
+          <input inputMode="numeric" value={customerNo} onChange={(e) => setCustomerNo(e.target.value)} placeholder="081234567890" />
+          <label>Metode pembayaran</label>
+          <select value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)}>
+            {paymentMethods.map((method) => <option key={method.id} value={method.id}>{paymentMethodDisplayName(method)} — admin {rupiah(method.adminFee)}</option>)}
+          </select>
+          {message && <div className="alert danger">{message}</div>}
+          <button className="btn primary full">Buat Invoice</button>
+        </form>
+      </div>
+
+      <aside className="panel stickyPanel orderSummary">
+        <span className="badge active">{product.brand}</span>
+        <h2>{product.name}</h2>
+        <p>SKU {product.buyerSkuCode}</p>
+        <div className="amountRow"><span>Harga produk</span><b>{rupiah(product.sellingPrice)}</b></div>
+        <div className="amountRow"><span>Admin fee</span><b>{rupiah(selectedPayment?.adminFee || 0)}</b></div>
+        <div className="amountRow total"><span>Total bayar</span><b>{rupiah(total)}</b></div>
+        <div className="mobileStickyAction"><button className="btn primary full" onClick={() => document.querySelector<HTMLButtonElement>('.checkoutForm .btn')?.click()}>Buat Invoice</button></div>
+      </aside>
+    </section>
+  );
+}
+
+function ProductGrid({ products, flash = false }: { products: Product[]; flash?: boolean }) {
+  if (!products.length) return <EmptyState title="Belum ada produk" text="Jalankan sync produk dari Admin atau cek filter pencarian." />;
+  return <div className="productGrid">{products.map((p) => <ProductCard key={p.id} product={p} flash={flash || p.isFlashsale} />)}</div>;
+}
+
+function ProductCard({ product, flash }: { product: Product; flash?: boolean }) {
+  const initials = (product.brand || product.name || 'EP').slice(0, 2).toUpperCase();
+
+  return (
+    <article className={flash ? 'productCard flash' : 'productCard'}>
+      <span className={flash ? 'neoPill hot' : product.isActive ? 'neoPill' : 'neoPill muted'}>{flash ? 'Promo' : product.isActive ? 'Ready' : 'Off'}</span>
+      <div className="productMedia"><span>{initials}</span></div>
+      <div className="productText">
+        <b>{product.brand}</b>
+        <h3>{product.name}</h3>
+        <p>SKU {product.buyerSkuCode}</p>
+        <strong>{rupiah(product.sellingPrice)}</strong>
+      </div>
+      <Link className="btn neoBuy full" to={`/checkout/${product.id}`}>Pilih</Link>
+    </article>
+  );
+}
+
+function Bills() {
+  const { data: billProducts } = useFetch<Product[]>('/products?audience=storefront&type=postpaid&active=all', []);
+  const { data: paymentMethods } = useFetch<PaymentMethod[]>('/payment-methods', []);
+  const [buyerSkuCode, setBuyerSkuCode] = useState('PLNPOSTPAID');
+  const [customerNo, setCustomerNo] = useState('530000000001');
+  const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [inquiry, setInquiry] = useState<any>(null);
+  const [message, setMessage] = useState('');
+  const navigate = useNavigate();
+
+  const selectedBill = billProducts.find((item) => item.buyerSkuCode === buyerSkuCode);
+  const selectedPayment = paymentMethods.find((item) => item.id === paymentMethodId) || paymentMethods[0];
+  const billTotal = Number(inquiry?.totalAmount || inquiry?.sellingPrice || 0);
+  const paymentAdminFee = Number(selectedPayment?.adminFee || 0);
+
+  useEffect(() => {
+    if (paymentMethods.length && !paymentMethods.some((item) => item.id === paymentMethodId)) {
+      setPaymentMethodId(preferredPaymentMethodId(paymentMethods));
+    }
+  }, [paymentMethods, paymentMethodId]);
+
+  async function doInquiry(e: FormEvent) {
+    e.preventDefault();
+    setMessage('');
+    setInquiry(null);
+    try {
+      const result = await api<any>('/store/bills/inquiry', { method: 'POST', body: JSON.stringify({ buyerSkuCode, customerNo, testing: true }) });
+      setInquiry(result);
+    } catch (error: any) {
+      setMessage(error.message || 'Inquiry tagihan gagal');
+    }
+  }
+
+  async function createOrder() {
+    if (!inquiry) return;
+    const result = await api<{ order: Order }>('/store/bills/order', {
+      method: 'POST',
+      body: JSON.stringify({ refId: inquiry.refId, paymentMethodId: paymentMethodId || preferredPaymentMethodId(paymentMethods) })
+    });
+    navigate(`/invoice/${result.order.invoice}`);
+  }
+
+  return (
+    <section className="page billsPage">
+      <PageHero eyebrow="Tagihan" title="Cek dan bayar tagihan" subtitle="Satu halaman khusus pascabayar: PLN, PDAM, BPJS, Internet, Telkom, Multifinance, dan pascabayar HP." />
+
+      <div className="billServiceGrid">
+        {billProducts.slice(0, 8).map((item) => (
+          <button key={item.id} className={buyerSkuCode === item.buyerSkuCode ? 'billService active' : 'billService'} onClick={() => setBuyerSkuCode(item.buyerSkuCode)}>
+            <span>{item.brand.slice(0, 2).toUpperCase()}</span>
+            <b>{item.name}</b>
+            <small>{item.buyerSkuCode}</small>
+          </button>
+        ))}
+      </div>
+
+      <div className="twoCol">
+        <form className="panel" onSubmit={doInquiry}>
+          <span className="eyebrow">Inquiry</span>
+          <h2>{selectedBill?.name || 'Pilih Tagihan'}</h2>
+          <label>Jenis tagihan</label>
+          <select value={buyerSkuCode} onChange={(e) => setBuyerSkuCode(e.target.value)}>
+            {billProducts.map((p) => <option key={p.id} value={p.buyerSkuCode}>{p.name} — {p.buyerSkuCode}</option>)}
+          </select>
+          <label>ID pelanggan</label>
+          <input value={customerNo} onChange={(e) => setCustomerNo(e.target.value)} placeholder="530000000001" />
+          <label>Metode pembayaran</label>
+          <select value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)}>
+            {paymentMethods.map((method) => <option key={method.id} value={method.id}>{paymentMethodDisplayName(method)} — admin {rupiah(method.adminFee)}</option>)}
+          </select>
+          {message && <div className="alert danger">{message}</div>}
+          <button className="btn primary full">Cek Tagihan</button>
+        </form>
+
+        <aside className="panel stickyPanel resultPanel">
+          <h2>Hasil Inquiry</h2>
+          {!inquiry ? <p className="muted">Nama pelanggan, periode, nominal tagihan, dan total bayar muncul setelah inquiry berhasil.</p> : (
+            <div className="invoiceMini">
+              <StatusBadge value={inquiry.providerStatus} />
+              <h3>{inquiry.customerNameMasked || maskCustomerName(inquiry.customerName) || 'Pelanggan'}</h3>
+              <p>ID: <b>{inquiry.customerNoMasked}</b></p>
+              <p>Produk: <b>{inquiry.buyerSkuCode}</b></p>
+              <p>Payment: <b>{paymentMethodDisplayName(selectedPayment)}</b></p>
+              <div className="amountRow"><span>Tagihan + admin provider</span><b>{rupiah(billTotal)}</b></div>
+              {paymentAdminFee > 0 && <div className="amountRow"><span>Admin payment</span><b>{rupiah(paymentAdminFee)}</b></div>}
+              <div className="amountRow total"><span>Total bayar</span><b>{rupiah(billTotal + paymentAdminFee)}</b></div>
+              <button className="btn primary full" onClick={createOrder}>Buat Invoice Pembayaran</button>
+            </div>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function Invoice() {
+  const { invoice = '' } = useParams();
+  const [tick, setTick] = useState(0);
+  const [message, setMessage] = useState('');
+  const { data, error, loading } = useFetch<OrderResponse>(
+    '/store/orders/' + invoice + '?t=' + tick,
+    { order: null as any, events: [] }
+  );
+  const order = data.order;
+  const isMidtrans = order?.paymentMethod === 'midtrans-snap' || order?.paymentProvider === 'midtrans';
+  const isPaid = String(order?.paymentStatus || '').toLowerCase() === 'paid';
+  const isFinal = ['success', 'failed', 'canceled', 'cancelled'].includes(String(order?.orderStatus || '').toLowerCase());
+
+  async function check() {
+    setMessage('');
+    try {
+      if (isMidtrans && !isPaid) {
+        setTick((v) => v + 1);
+        setMessage('Status Midtrans direfresh. Untuk localhost, sinkron settlement dilakukan dari Admin: Check Midtrans.');
+        return;
+      }
+      await api('/store/orders/' + invoice + '/check-status', { method: 'POST', body: '{}' });
+      setTick((v) => v + 1);
+      setMessage('Status transaksi berhasil dicek ulang.');
+    } catch (error: any) {
+      setMessage(error.message || 'Gagal cek status');
+    }
+  }
+
+  async function copyInvoice() {
+    await copyText(order.invoice);
+    setMessage('Nomor invoice disalin.');
+  }
+
+  async function copySn() {
+    if (!order.sn) return;
+    await copyText(order.sn);
+    setMessage('SN berhasil disalin.');
+  }
+
+  if (error) return <section className="page"><div className="alert danger">{error}</div></section>;
+  if (loading || !order) return <section className="page"><div className="skeleton">Memuat invoice...</div></section>;
+
+  return (
+    <section className="page twoCol invoicePage invoicePolishPage">
+      <div className="panel invoicePanel invoiceHeroPanel">
+        <div className="cardTop wrap invoiceHeaderStack">
+          <div>
+            <span className="eyebrow">Invoice</span>
+            <h1>{order.invoice}</h1>
+            <p>{order.productName}</p>
+          </div>
+          <div className="invoiceBadges">
+            <StatusBadge value={order.paymentStatus} />
+            <StatusBadge value={order.orderStatus} />
+          </div>
+        </div>
+
+        <div className="invoiceStepper" aria-label="Status transaksi">
+          {getInvoiceSteps(order).map((step) => (
+            <div className={'invoiceStep ' + step.state} key={step.label}>
+              <span>{step.icon}</span>
+              <div><b>{step.label}</b><small>{step.text}</small></div>
+            </div>
+          ))}
+        </div>
+
+        <div className="invoiceInfoGrid">
+          <InfoPill label="Tujuan" value={order.customerNoMasked} />
+          <InfoPill label="SKU" value={order.buyerSkuCode} />
+          {order.customerName && <InfoPill label="Nama" value={maskCustomerName(order.customerName)} />}
+          {order.midtransPaymentType && <InfoPill label="Channel" value={order.midtransPaymentType} />}
+        </div>
+
+        <div className="amountBox">
+          <div className="amountRow"><span>Harga</span><b>{rupiah(order.amount)}</b></div>
+          <div className="amountRow"><span>Admin fee</span><b>{rupiah(order.adminFee)}</b></div>
+          <div className="amountRow total"><span>Total bayar</span><b>{rupiah(order.totalAmount)}</b></div>
+        </div>
+
+        <div className={`invoiceStatusGuide ${String(order.paymentStatus || '').toLowerCase()} ${String(order.orderStatus || '').toLowerCase()}`}>
+          <div>
+            <span className="eyebrow">Status Invoice</span>
+            <h3>{getInvoiceStatusTitle(order)}</h3>
+            <p>{getInvoiceStatusAdvice(order)}</p>
+          </div>
+          <div className="invoiceStatusPills">
+            {getInvoiceStatusPills(order).map((status) => (
+              <StatusBadge key={status} value={status} />
+            ))}
+          </div>
+        </div>
+
+        {message && <div className="alert">{message}</div>}
+        {order.providerMessage && <div className="alert">{order.providerMessage}</div>}
+        {order.sn && (
+          <div className="resultCard successResult">
+            <span className="eyebrow">Transaksi Sukses</span>
+            <h2>SN / Token</h2>
+            <code>{order.sn}</code>
+            <button className="btn ghost full" type="button" onClick={copySn}>Salin SN</button>
+          </div>
+        )}
+
+        <div className="invoiceActions">
+          <button className="btn ghost" type="button" onClick={copyInvoice}>Salin Invoice</button>
+          <button className="btn primary" type="button" onClick={check}>{isFinal ? 'Refresh Status' : 'Cek Status'}</button>
+        </div>
+      </div>
+
+      <aside className="panel paymentBox stickyPanel invoicePaymentPanel">
+        <span className="eyebrow">Pembayaran</span>
+        <h2>{isMidtrans ? 'Midtrans' : 'Manual QRIS'}</h2>
+        <p className="muted">{getPaymentCaption(order)}</p>
+
+        {isMidtrans ? (
+          <div className="midtransPayBox">
+            <div className="paymentLogo">MT</div>
+            <StatusBadge value={displayMidtransStatus(order.midtransStatus)} />
+            {order.midtransRedirectUrl && !isPaid && (
+              <a className="btn primary full" href={order.midtransRedirectUrl} target="_blank" rel="noreferrer">Bayar via Midtrans</a>
+            )}
+            {order.midtransRedirectUrl && (
+              <a className="btn ghost full" href={order.midtransRedirectUrl} target="_blank" rel="noreferrer">Buka ulang halaman bayar</a>
+            )}
+            {order.midtransOrderId && <InfoPill label="Order ID" value={order.midtransOrderId} />}
+            {order.midtransTransactionId && <InfoPill label="Transaction ID" value={order.midtransTransactionId} />}
+            {!isPaid && <div className="alert warning">Jika pembayaran sandbox sudah settlement tetapi halaman masih unpaid, buka Admin lalu jalankan Check Midtrans.</div>}
+          </div>
+        ) : (
+          <div className="manualPayBox">
+            {((data as any).paymentMethod?.qrisPayload) ? (
+              <div className="qrisBox qrisBoxReal">
+                <QRCodeSVG
+                  value={(data as any).paymentMethod.qrisPayload}
+                  size={220}
+                  level="M"
+                  includeMargin
+                />
+              </div>
+            ) : ((data as any).paymentMethod?.qrisImageUrl) ? (
+              <img className="qrisImage" src={(data as any).paymentMethod.qrisImageUrl} alt="QRIS pembayaran" />
+            ) : (
+              <div className="qrisBox">QRIS belum tersedia</div>
+            )}
+            <div className="qrisInstructionBox">
+              <b>{isPaid ? 'Pembayaran sudah tercatat' : 'Instruksi pembayaran Manual QRIS'}</b>
+              <p>{isPaid ? 'Jangan bayar ulang invoice ini. Jika transaksi belum sukses, admin atau sistem akan melakukan cek status provider.' : 'Scan QRIS, bayar sesuai total invoice, lalu tunggu admin approve manual. Transaksi ke Digiflazz dikirim setelah status paid.'}</p>
+              <small>Total bayar: {rupiah(order.totalAmount)}</small>
+            </div>
+          </div>
+        )}
+
+        <h3>Riwayat Status</h3>
+        <div className="timeline invoiceTimeline">
+          {(data.events || []).map((event) => (
+            <div key={event.id}>
+              <b>{formatEventLabel(event.type)}</b>
+              {event.message && <p>{event.message}</p>}
+              <small>{new Date(event.createdAt).toLocaleString('id-ID')}</small>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </section>
+  );
+}
+
+function getInvoiceStatusPills(order: any) {
+  const payment = String(order.paymentStatus || '').toLowerCase();
+  const status = String(order.orderStatus || '').toLowerCase();
+  const provider = String(order.providerStatus || '').toLowerCase();
+
+  if (status === 'success' || provider === 'sukses') return ['Sukses'];
+  if (status === 'failed') return ['Gagal'];
+  if (status === 'canceled' || status === 'cancelled') return ['Dibatalkan'];
+
+  if (payment === 'paid' && status === 'processing') {
+    if (provider === 'pending') return ['Paid', 'Provider Pending'];
+    return ['Paid', 'Processing'];
+  }
+
+  if (payment === 'unpaid') return ['Unpaid'];
+
+  const values = [order.paymentStatus, order.orderStatus, order.providerStatus]
+    .filter(Boolean)
+    .map((value: any) => String(value));
+
+  const normalized = new Set<string>();
+  const out: string[] = [];
+
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (normalized.has(key)) continue;
+    normalized.add(key);
+    out.push(value);
+  }
+
+  return out.slice(0, 2);
+}
+
+function getInvoiceStatusTitle(order: any) {
+  const payment = String(order.paymentStatus || '').toLowerCase();
+  const status = String(order.orderStatus || '').toLowerCase();
+  const provider = String(order.providerStatus || '').toLowerCase();
+
+  if (status === 'success') return 'Transaksi sukses';
+  if (status === 'failed') return 'Transaksi gagal';
+  if (payment === 'paid' && status === 'processing') return 'Pembayaran diterima, transaksi diproses';
+  if (payment === 'paid' && provider === 'pending') return 'Pembayaran diterima, provider pending';
+  if (payment === 'unpaid') return 'Menunggu pembayaran';
+  return 'Invoice aktif';
+}
+
+function getInvoiceStatusAdvice(order: any) {
+  const payment = String(order.paymentStatus || '').toLowerCase();
+  const status = String(order.orderStatus || '').toLowerCase();
+  const provider = String(order.providerStatus || '').toLowerCase();
+
+  if (status === 'success') return 'Transaksi sudah final. Simpan SN/token sebagai bukti transaksi.';
+  if (status === 'failed') return 'Transaksi gagal. Hubungi admin dengan nomor invoice untuk pengecekan.';
+  if (payment === 'paid' && status === 'processing') return 'Dana sudah tercatat. Jangan bayar ulang. Tunggu proses provider atau klik Cek Status.';
+  if (payment === 'paid' && provider === 'pending') return 'Provider masih pending. Jangan bayar ulang. Cek status berkala.';
+  if (payment === 'unpaid') return 'Bayar sesuai total invoice. Untuk Manual QRIS, admin akan approve setelah dana terkonfirmasi.';
+  return 'Gunakan tombol Cek Status untuk memperbarui status invoice.';
+}
+
+function InfoPill({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return <div className="infoPill"><small>{label}</small><b>{value}</b></div>;
+}
+
+async function copyText(value: string) {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const input = document.createElement('textarea');
+  input.value = value;
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand('copy');
+  document.body.removeChild(input);
+}
+
+function getPaymentCaption(order: Order) {
+  const isMidtrans = order.paymentMethod === 'midtrans-snap' || order.paymentProvider === 'midtrans';
+  if (isMidtrans && order.paymentStatus === 'paid') return 'Pembayaran Midtrans sudah settlement dan tersinkron ke invoice.';
+  if (isMidtrans) return 'Selesaikan pembayaran melalui Midtrans. Untuk localhost, settlement disinkronkan dari admin atau webhook publik.';
+  return 'Gunakan QRIS manual. Admin akan approve pembayaran setelah dana diterima.';
+}
+
+function getInvoiceSteps(order: Order) {
+  const paymentPaid = String(order.paymentStatus || '').toLowerCase() === 'paid';
+  const status = String(order.orderStatus || '').toLowerCase();
+  const providerStatus = String(order.providerStatus || '').toLowerCase();
+  const success = status === 'success' || providerStatus === 'sukses' || providerStatus === 'success';
+  const failed = status === 'failed' || providerStatus === 'gagal' || providerStatus === 'failed';
+  return [
+    { label: 'Invoice', text: 'Invoice dibuat', icon: '1', state: 'done' },
+    { label: 'Pembayaran', text: paymentPaid ? 'Sudah paid' : 'Menunggu pembayaran', icon: '2', state: paymentPaid ? 'done' : 'active' },
+    { label: 'Provider', text: paymentPaid ? (success ? 'Provider sukses' : failed ? 'Provider gagal' : 'Diproses ke Digiflazz') : 'Belum dikirim', icon: '3', state: success ? 'done' : failed ? 'failed' : paymentPaid ? 'active' : 'idle' },
+    { label: 'Selesai', text: success ? 'SN tersedia' : failed ? 'Transaksi gagal' : 'Menunggu hasil', icon: '4', state: success ? 'done' : failed ? 'failed' : 'idle' }
+  ];
+}
+
+function formatEventLabel(type: string) {
+  return String(type || '')
+    .replace(/midtrans-snap-created/gi, 'midtrans-payment-created')
+    .replace(/snap/gi, 'payment')
+    .split('-')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function CheckOrder() {
+  const [invoice, setInvoice] = useState('');
+  const [data, setData] = useState<OrderResponse | null>(null);
+  const [message, setMessage] = useState('');
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setMessage('');
+    try {
+      setData(await api<OrderResponse>(`/store/orders/${invoice}`));
+    } catch (error: any) {
+      setMessage(error.message || 'Pesanan tidak ditemukan');
+      setData(null);
+    }
+  }
+
+  return (
+    <section className="page narrow checkPage">
+      <PageHero eyebrow="Cek Pesanan" title="Lacak invoice" subtitle="Masukkan nomor invoice untuk melihat status pembayaran, status order, tujuan yang sudah dimasking, dan SN jika sukses." />
+      <form className="panel searchInvoice" onSubmit={submit}>
+        <input value={invoice} onChange={(e) => setInvoice(e.target.value)} placeholder="INV2026..." />
+        <button className="btn primary">Cari</button>
+      </form>
+      {message && <div className="alert danger">{message}</div>}
+      {data?.order && (
+        <div className="panel orderResult">
+          <div className="cardTop wrap"><h2>{data.order.invoice}</h2><div><StatusBadge value={data.order.paymentStatus} /><StatusBadge value={data.order.orderStatus} /></div></div>
+          <p>{data.order.productName}</p>
+          <p>Tujuan: <b>{data.order.customerNoMasked}</b></p>
+          <div className="amountRow total"><span>Total</span><b>{rupiah(data.order.totalAmount)}</b></div>
+          {data.order.sn && <div className="alert success">SN: {data.order.sn}</div>}
+          <Link className="btn ghost full" to={`/invoice/${data.order.invoice}`}>Buka Detail Invoice</Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Support({ whatsapp }: { whatsapp?: string }) {
+  return (
+    <section className="page narrow">
+      <PageHero eyebrow="Bantuan" title="Butuh bantuan transaksi?" subtitle="Siapkan invoice atau nomor tujuan agar admin bisa cek transaksi lebih cepat." />
+      <div className="panel supportPanel">
+        <h2>Kontak Admin</h2>
+        <p>Gunakan WhatsApp untuk bantuan pembayaran manual, pengecekan invoice, atau transaksi pending.</p>
+        {whatsapp ? <a className="btn primary full" href={`https://wa.me/${whatsapp}`}>Chat WhatsApp</a> : <div className="alert">Nomor WhatsApp belum diatur di site settings.</div>}
+      </div>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    ['1', 'Pilih produk/tagihan', 'Customer memilih kategori atau layanan pascabayar.'],
+    ['2', 'Input tujuan', 'Nomor HP atau ID pelanggan divalidasi sebelum invoice dibuat.'],
+    ['3', 'Bayar Midtrans/QRIS', 'Invoice unpaid menunggu pembayaran sesuai metode aktif.'],
+    ['4', 'Provider diproses', 'Setelah paid, API mengirim transaksi ke Digiflazz.']
+  ];
+  return <div className="steps">{steps.map(([number, title, text]) => <div className="step" key={number}><span>{number}</span><b>{title}</b><p>{text}</p></div>)}</div>;
+}
+
+function PageHero({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
+  return <div className="pageHero"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div>;
+}
+
+function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+  return <div className="sectionTitle"><div><span className="eyebrow">ERLKIM PULSA</span><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>{action && <div className="sectionAction">{action}</div>}</div>;
+}
+
+function StatusBadge({ value }: { value?: string }) {
+  const clean = String(value || 'pending').toLowerCase();
+  return <span className={`badge ${clean}`}>{value || 'pending'}</span>;
+}
+
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return <div className="empty"><b>{title}</b><p>{text}</p></div>;
+}
+
+function SkeletonGrid() {
+  return <div className="productGrid">{Array.from({ length: 8 }).map((_, index) => <div className="skeleton cardSkeleton" key={index}>Memuat...</div>)}</div>;
+}
+
+function Footer({ text, whatsapp }: { text?: string; whatsapp?: string }) {
+  return <footer className="footer"><p>{text || '© ERLKIM PULSA — PPOB Digital'}</p>{whatsapp && <a href={`https://wa.me/${whatsapp}`}>Bantuan WhatsApp</a>}</footer>;
+}
+
+// v68d final color override
+import './styles/v68d-halloween-rain-text-contrast.css';
+
+// v68e final Halloween contrast override
+import './styles/v68e-final-halloween-contrast-polish.css';
+
+// v68f product card Halloween polish
+import './styles/v68f-product-card-halloween-polish.css';

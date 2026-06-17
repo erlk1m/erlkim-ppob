@@ -1,0 +1,23 @@
+{
+  "name": "erlkim-ppob-digiflazz-consistent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starter web PPOB ERLKIM PULSA dengan theme Figma Neo-brutalism ringan dan integrasi Digiflazz.",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:api": "pnpm --filter @erlkim-ppob/api dev",
+    "dev:web": "pnpm --filter @erlkim-ppob/web dev",
+    "build": "pnpm -r build",
+    "start:api": "pnpm --filter @erlkim-ppob/api start",
+    "smoke:local": "node scripts/smoke-local.mjs",
+    "dev:admin": "pnpm --filter @erlkim-ppob/admin dev",
+    "build:admin": "pnpm --filter @erlkim-ppob/admin build",
+    "build:web": "pnpm --filter @erlkim-ppob/web build",
+    "preview:web": "pnpm --filter @erlkim-ppob/web preview"
+  },
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  }
+}

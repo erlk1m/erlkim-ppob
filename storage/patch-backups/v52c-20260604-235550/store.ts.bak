@@ -1,0 +1,312 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { seedDatabase } from './seed.js';
+import { nowIso } from './utils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const storageDir = path.resolve(__dirname, '../storage');
+const dbFile = path.join(storageDir, 'db.json');
+
+export class JsonStore {
+  data: any;
+
+  constructor() {
+    fs.mkdirSync(storageDir, { recursive: true });
+    if (!fs.existsSync(dbFile)) {
+      fs.writeFileSync(dbFile, JSON.stringify(seedDatabase(), null, 2));
+    }
+    this.data = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
+  }
+
+  save() {
+    this.data.updatedAt = nowIso();
+    fs.writeFileSync(dbFile, JSON.stringify(this.data, null, 2));
+  }
+
+  settingsPublic() {
+    return {
+      site: this.data.siteSettings,
+      theme: this.data.themeSettings,
+      paymentMethods: this.data.paymentMethods.filter((m: any) => m.isEnabled)
+    };
+  }
+
+  categories(query: any = {}) {
+    let list = this.data.categories.filter((c: any) => c.isActive);
+    if (isStorefrontAudience(query)) {
+      const visibleCategorySlugs = new Set(this.data.products.filter(isStorefrontProduct).map((p: any) => p.categorySlug));
+      list = list.filter((c: any) => visibleCategorySlugs.has(c.slug));
+    }
+    return list;
+  }
+
+  products(query: any = {}) {
+    const storefrontAudience = isStorefrontAudience(query);
+    let list = [...this.data.products];
+
+    if (query.active !== 'all') list = list.filter((p: any) => p.isActive);
+    if (storefrontAudience) list = list.filter(isStorefrontProduct);
+    if (query.category) list = list.filter((p: any) => p.categorySlug === query.category || p.categoryId === query.category);
+    if (query.type) list = list.filter((p: any) => p.type === query.type);
+
+    if (query.brand) {
+      const brand = normalizeCatalogText(query.brand);
+      list = storefrontAudience
+        ? list.filter((p: any) => normalizeStorefrontBrand(p) === brand)
+        : list.filter((p: any) => normalizeCatalogText(p.brand) === brand);
+    }
+
+    if (query.search) {
+      const s = String(query.search).toLowerCase();
+      list = list.filter((p: any) => [p.name, p.brand, p.buyerSkuCode].some((v) => String(v).toLowerCase().includes(s)));
+    }
+
+    if (query.popular === 'true') list = list.filter((p: any) => p.isPopular);
+    if (query.flashsale === 'true') list = list.filter((p: any) => p.isFlashsale);
+    if (storefrontAudience && query.dedupe !== 'false') list = dedupeStorefrontProducts(list);
+
+    if (query.sort === 'price_asc') list.sort((a: any, b: any) => a.sellingPrice - b.sellingPrice || compareStorefrontProducts(a, b));
+    else if (query.sort === 'price_desc') list.sort((a: any, b: any) => b.sellingPrice - a.sellingPrice || compareStorefrontProducts(a, b));
+    else if (query.sort === 'brand_asc' || storefrontAudience) list.sort(compareStorefrontProducts);
+
+    return list;
+  }
+
+  productById(id: string) {
+    return this.data.products.find((p: any) => p.id === id || p.buyerSkuCode === id);
+  }
+
+  paymentMethod(id: string) {
+    return this.data.paymentMethods.find((m: any) => m.id === id && m.isEnabled);
+  }
+
+  addOrder(order: any) {
+    this.data.orders.unshift(order);
+    this.addOrderEvent(order.invoice, 'created', { paymentStatus: order.paymentStatus, orderStatus: order.orderStatus });
+    this.save();
+    return order;
+  }
+
+  orderByInvoice(invoice: string) {
+    return this.data.orders.find((o: any) => o.invoice === invoice || o.refId === invoice);
+  }
+
+  updateOrder(invoice: string, patch: any, eventName = 'updated') {
+    const order = this.orderByInvoice(invoice);
+    if (!order) return null;
+    Object.assign(order, patch, { updatedAt: nowIso() });
+    this.addOrderEvent(order.invoice, eventName, patch);
+    this.save();
+    return order;
+  }
+
+  addOrderEvent(invoice: string, type: string, payload: any) {
+    this.data.orderEvents ||= [];
+    this.data.orderEvents.unshift({ id: `${Date.now()}-${Math.random()}`, invoice, type, payload, createdAt: nowIso() });
+  }
+
+  addPaymentLog(type: string, payload: any) {
+    this.data.paymentLogs.unshift({ id: `${Date.now()}-${Math.random()}`, type, payload, createdAt: nowIso() });
+    this.save();
+  }
+
+  addProviderLog(direction: 'request' | 'response' | 'error', action: string, payload: any) {
+    this.data.providerLogs.unshift({ id: `${Date.now()}-${Math.random()}`, direction, action, payload: maskSensitive(payload), createdAt: nowIso() });
+    this.data.providerLogs = this.data.providerLogs.slice(0, 300);
+    this.save();
+  }
+
+  addWebhookLog(provider: string, payload: any) {
+    this.data.webhookLogs.unshift({ id: `${Date.now()}-${Math.random()}`, provider, payload: maskSensitive(payload), createdAt: nowIso() });
+    this.save();
+  }
+}
+
+
+function isStorefrontAudience(query: any = {}) {
+  return query.audience === 'storefront' || query.storefront === 'true' || query.public === 'true';
+}
+
+function normalizeCatalogText(value: any) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9.]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const POSTPAID_STOREFRONT_SKUS = new Set(['PLNPOSTPAID', 'BPJSB', 'PDAM', 'PDAMPOSTPAID']);
+const PULSA_OPERATOR_BRANDS = [/^TELKOMSEL$/, /^INDOSAT$/, /^XL$/, /^AXIS$/, /^TRI$/, /^THREE$/, /^SMARTFREN$/, /^BY\.?U$/];
+const DATA_OPERATOR_BRANDS = [/^TELKOMSEL$/, /^INDOSAT$/, /^XL$/, /^AXIS$/, /^TRI$/, /^THREE$/, /^SMARTFREN$/, /^BY\.?U$/];
+const EMONEY_BRANDS = [/^DANA$/, /^OVO$/, /^GO ?PAY$/, /^GOPAY$/, /^SHOPEE ?PAY$/, /^LINKAJA$/, /^DOKU$/, /^I\.?SAKU$/];
+const GAME_BRANDS = [/FREE FIRE/, /MOBILE LEGENDS/, /GOOGLE PLAY/, /PLAYSTATION/];
+const STOREFRONT_HIDDEN_TERMS = [
+  'K VISION', 'K-VISION', 'NEX PARABOLA', 'ESIM', 'TRAVEL', 'VIDIO', 'PERTAMINA GAS', 'PERTAGAS',
+  'STARHUB', 'VIETNAM TOPUP', 'TRUEMOVE', 'SMART COMMUNICATIONS', 'HOTEL'
+];
+const PULSA_HIDDEN_TERMS = ['DATA', 'VOUCHER', 'AKTIVASI', 'PERDANA', 'MASA AKTIF', 'TELEPON', 'SMS', 'PAKET'];
+const DATA_HIDDEN_TERMS = ['AKTIVASI', 'PERDANA', 'VOUCHER', 'ESIM', 'TRAVEL'];
+
+
+const STOREFRONT_BRAND_ORDER = [
+  'TELKOMSEL', 'INDOSAT', 'XL', 'AXIS', 'TRI', 'SMARTFREN', 'BY.U',
+  'PLN', 'DANA', 'OVO', 'GO PAY', 'SHOPEE PAY', 'LINKAJA', 'DOKU', 'I.SAKU',
+  'FREE FIRE', 'MOBILE LEGENDS', 'GOOGLE PLAY', 'PLAYSTATION', 'LAINNYA'
+];
+
+function normalizeStorefrontBrand(product: any) {
+  const text = normalizeCatalogText([product?.brand, product?.name, product?.buyerSkuCode].join(' '));
+  if (/TELKOMSEL/.test(text)) return 'TELKOMSEL';
+  if (/INDOSAT/.test(text)) return 'INDOSAT';
+  if (/SMARTFREN/.test(text)) return 'SMARTFREN';
+  if (/AXIS/.test(text)) return 'AXIS';
+  if (/BY\.?U|BY U/.test(text)) return 'BY.U';
+  if (/\b(TRI|THREE)\b/.test(text)) return 'TRI';
+  if (/\bXL\b/.test(text)) return 'XL';
+  if (/PLN/.test(text)) return 'PLN';
+  if (/SHOPEE ?PAY/.test(text)) return 'SHOPEE PAY';
+  if (/GO ?PAY|GOPAY/.test(text)) return 'GO PAY';
+  if (/LINKAJA|LINK AJA/.test(text)) return 'LINKAJA';
+  if (/I\.?SAKU|I SAKU/.test(text)) return 'I.SAKU';
+  if (/DANA/.test(text)) return 'DANA';
+  if (/OVO/.test(text)) return 'OVO';
+  if (/DOKU/.test(text)) return 'DOKU';
+  if (/FREE FIRE/.test(text)) return 'FREE FIRE';
+  if (/MOBILE LEGENDS?/.test(text)) return 'MOBILE LEGENDS';
+  if (/GOOGLE PLAY/.test(text)) return 'GOOGLE PLAY';
+  if (/PLAYSTATION/.test(text)) return 'PLAYSTATION';
+  return normalizeCatalogText(product?.brand) || 'LAINNYA';
+}
+
+function brandRank(product: any) {
+  const brand = normalizeStorefrontBrand(product);
+  const index = STOREFRONT_BRAND_ORDER.indexOf(brand);
+  return index === -1 ? STOREFRONT_BRAND_ORDER.length : index;
+}
+
+function extractStorefrontNominal(product: any) {
+  const text = normalizeCatalogText(product?.name);
+  const dotted = text.match(/\b\d{1,3}(?:\.\d{3})+\b/);
+  if (dotted) return Number(dotted[0].replace(/\./g, '')) || 0;
+  const diamond = text.match(/\b(\d{1,5})\s*(DIAMOND|DIAMONDS|DM)\b/);
+  if (diamond) return Number(diamond[1]) || 0;
+  const plain = text.match(/\b(\d{3,7})\b/);
+  if (plain) return Number(plain[1]) || 0;
+  return Number(product?.sellingPrice || product?.providerPrice || 0) || 0;
+}
+
+function compactProductName(product: any) {
+  return normalizeCatalogText(product?.name)
+    .replace(/\b(REGULER|NASIONAL|MASUKKAN|NOMOR|METER|ID|PELANGGAN|SEBAGAI|NO|HP|JUMLAH|DIAMOND|DIAMONDS|NORMAL|BONUS|TIDAK|DIHITUNG)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function storefrontDedupeKey(product: any) {
+  const category = String(product?.categorySlug || 'unknown');
+  const brand = normalizeStorefrontBrand(product);
+  const nominal = extractStorefrontNominal(product);
+
+  if (['pulsa', 'token-pln', 'emoney', 'voucher-game'].includes(category)) {
+    return [category, brand, nominal || compactProductName(product)].join('|');
+  }
+
+  if (category === 'tagihan') {
+    return [category, normalizeCatalogText(product?.buyerSkuCode || product?.name)].join('|');
+  }
+
+  return [category, brand, compactProductName(product)].join('|');
+}
+
+function productAvailabilityScore(product: any) {
+  let score = 0;
+  if (product?.isActive !== false) score += 10;
+  if (product?.buyerProductStatus !== false) score += 5;
+  if (product?.sellerProductStatus !== false) score += 5;
+  if (product?.isPopular) score += 1;
+  if (product?.isFlashsale) score += 1;
+  return score;
+}
+
+function chooseBetterStorefrontProduct(current: any, candidate: any) {
+  const currentScore = productAvailabilityScore(current);
+  const candidateScore = productAvailabilityScore(candidate);
+  if (candidateScore !== currentScore) return candidateScore > currentScore ? candidate : current;
+
+  const currentPrice = Number(current?.sellingPrice || Number.MAX_SAFE_INTEGER);
+  const candidatePrice = Number(candidate?.sellingPrice || Number.MAX_SAFE_INTEGER);
+  if (candidatePrice !== currentPrice) return candidatePrice < currentPrice ? candidate : current;
+
+  const currentSku = String(current?.buyerSkuCode || '');
+  const candidateSku = String(candidate?.buyerSkuCode || '');
+  return candidateSku.length < currentSku.length ? candidate : current;
+}
+
+function dedupeStorefrontProducts(list: any[]) {
+  const byKey = new Map<string, any>();
+  for (const product of list) {
+    const key = storefrontDedupeKey(product);
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? chooseBetterStorefrontProduct(existing, product) : product);
+  }
+  return Array.from(byKey.values());
+}
+
+function compareStorefrontProducts(a: any, b: any) {
+  const brandDiff = brandRank(a) - brandRank(b);
+  if (brandDiff) return brandDiff;
+  const nominalDiff = extractStorefrontNominal(a) - extractStorefrontNominal(b);
+  if (nominalDiff) return nominalDiff;
+  return String(a?.name || '').localeCompare(String(b?.name || ''), 'id');
+}
+
+function matchAny(value: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(value));
+}
+
+function hasHiddenTerm(text: string, terms: string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
+function isStorefrontProduct(product: any) {
+  if (!product || product.isActive === false) return false;
+
+  const sku = normalizeCatalogText(product.buyerSkuCode);
+  const brand = normalizeCatalogText(product.brand);
+  const name = normalizeCatalogText(product.name);
+  const text = normalizeCatalogText([product.brand, product.name, product.buyerSkuCode, product.description].join(' '));
+
+  if (hasHiddenTerm(text, STOREFRONT_HIDDEN_TERMS)) return false;
+
+  if (product.type === 'postpaid') {
+    return product.categorySlug === 'tagihan' && POSTPAID_STOREFRONT_SKUS.has(sku);
+  }
+
+  if (product.type !== 'prepaid') return false;
+
+  switch (product.categorySlug) {
+    case 'pulsa':
+      return matchAny(brand, PULSA_OPERATOR_BRANDS) && !hasHiddenTerm(name, PULSA_HIDDEN_TERMS);
+    case 'paket-data':
+      return matchAny(brand, DATA_OPERATOR_BRANDS) && !hasHiddenTerm(name, DATA_HIDDEN_TERMS);
+    case 'token-pln':
+      return brand.includes('PLN') || name.startsWith('PLN ');
+    case 'emoney':
+      return matchAny(brand, EMONEY_BRANDS);
+    case 'voucher-game':
+      return matchAny(brand, GAME_BRANDS);
+    default:
+      return false;
+  }
+}
+
+function maskSensitive(payload: any) {
+  const raw = JSON.parse(JSON.stringify(payload || {}));
+  const walk = (value: any) => {
+    if (!value || typeof value !== 'object') return;
+    for (const key of Object.keys(value)) {
+      if (/api.?key|secret|sign|password|token/i.test(key)) value[key] = '***masked***';
+      else walk(value[key]);
+    }
+  };
+  walk(raw);
+  return raw;
+}

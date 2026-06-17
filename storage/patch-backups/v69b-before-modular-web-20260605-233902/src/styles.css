@@ -1,0 +1,561 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+html[data-theme="halloween"] {
+  --bg: #14081f;
+  --bg2: #291036;
+  --panel: #21102d;
+  --panel2: #321747;
+  --text: #fff6df;
+  --muted: #f2c98a;
+  --border: #ff8a00;
+  --accent: #ff8a00;
+  --accent2: #b56cff;
+  --danger: #ff5b5b;
+  --btnText: #17091f;
+}
+
+html[data-theme="storm"] {
+  --bg: #06101d;
+  --bg2: #10243d;
+  --panel: #0f1b2e;
+  --panel2: #162944;
+  --text: #eff8ff;
+  --muted: #b8dcff;
+  --border: #68d8ff;
+  --accent: #68d8ff;
+  --accent2: #ffe66d;
+  --danger: #ff7070;
+  --btnText: #06101d;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 28%, transparent), transparent 32rem),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--accent2) 20%, transparent), transparent 36rem),
+    linear-gradient(135deg, var(--bg), var(--bg2));
+  color: var(--text);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+  background-size: 42px 42px;
+  opacity: .5;
+}
+
+.weatherLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+html[data-theme="halloween"] .weatherLayer::before {
+  content: "🎃 🦇 👻";
+  position: absolute;
+  inset: 0;
+  opacity: .12;
+  font-size: 4rem;
+  word-spacing: 3rem;
+  line-height: 8rem;
+  transform: rotate(-8deg);
+}
+
+html[data-theme="storm"] .weatherLayer::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background-image: repeating-linear-gradient(
+    110deg,
+    rgba(255,255,255,.34) 0 1px,
+    transparent 1px 13px
+  );
+  opacity: .28;
+  animation: rain .42s linear infinite;
+}
+
+html[data-theme="storm"] .weatherLayer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: lightning 6s infinite;
+}
+
+.header,
+main {
+  position: relative;
+  z-index: 2;
+}
+
+.header {
+  width: min(1180px, calc(100% - 28px));
+  margin: 14px auto 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 3px solid #000;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: 6px 6px 0 #000;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  min-width: max-content;
+}
+
+.brandIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #000;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--btnText);
+  box-shadow: 3px 3px 0 #000;
+}
+
+.brand strong,
+.brand small {
+  display: block;
+}
+
+.brand small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.nav {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 900;
+  padding: 10px 12px;
+  border: 2px solid #000;
+  border-radius: 999px;
+  background: var(--panel2);
+}
+
+.themeToggle {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 3px solid #000;
+  border-radius: 999px;
+  background: var(--panel2);
+  box-shadow: 4px 4px 0 #000;
+}
+
+.themeToggle button {
+  width: 36px;
+  height: 36px;
+  border: 2px solid #000;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 19px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #000;
+}
+
+.themeToggle button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--btnText);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+main {
+  width: min(1180px, calc(100% - 28px));
+  margin: 24px auto 64px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.4fr .6fr;
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.hero > div,
+.panel {
+  border: 3px solid #000;
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 7px 7px 0 #000;
+}
+
+.hero > div {
+  padding: clamp(22px, 5vw, 42px);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+h1,
+h2 {
+  margin: 0;
+  line-height: 1.05;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 4.4rem);
+  letter-spacing: -0.06em;
+}
+
+h2 {
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.heroText {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.heroCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.heroCard strong {
+  font-size: 1.35rem;
+}
+
+.heroCard span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.panel {
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sectionHead span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.categoryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 10px;
+}
+
+.categoryGrid button,
+.primaryBtn {
+  border: 3px solid #000;
+  border-radius: 18px;
+  background: var(--panel2);
+  color: var(--text);
+  font-weight: 950;
+  padding: 13px 14px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.categoryGrid button.active,
+.primaryBtn {
+  background: var(--accent);
+  color: var(--btnText);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+.productGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 12px;
+}
+
+.productCard {
+  min-height: 150px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 14px;
+  border: 3px solid #000;
+  border-radius: 22px;
+  background: var(--panel2);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 5px 5px 0 #000;
+}
+
+.productCard.active {
+  outline: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--panel2) 74%, var(--accent));
+}
+
+.productBrand {
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 2px solid #000;
+  border-radius: 999px;
+  background: var(--accent2);
+  color: #111;
+  font-size: .72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.productCard strong {
+  font-size: .98rem;
+  line-height: 1.2;
+}
+
+.productPrice {
+  color: var(--accent);
+  font-size: 1.05rem;
+  font-weight: 950;
+}
+
+.checkoutPanel {
+  position: sticky;
+  top: 18px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-weight: 950;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 3px solid #000;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 80%, #000);
+  color: var(--text);
+  padding: 13px 14px;
+  font: inherit;
+  font-weight: 800;
+}
+
+textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.selectedBox,
+.alert,
+.empty,
+.paymentBox {
+  border: 3px solid #000;
+  border-radius: 20px;
+  background: var(--panel2);
+  padding: 14px;
+}
+
+.selectedBox {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+}
+
+.selectedBox span {
+  color: var(--muted);
+}
+
+.alert {
+  background: color-mix(in srgb, var(--danger) 24%, var(--panel));
+  color: var(--text);
+  font-weight: 900;
+  margin-bottom: 14px;
+}
+
+.empty {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.primaryBtn {
+  width: 100%;
+  font-size: 1rem;
+}
+
+.primaryBtn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.invoicePage {
+  max-width: 760px;
+}
+
+.invoicePanel h1 {
+  word-break: break-word;
+  margin-bottom: 18px;
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.statusGrid div {
+  border: 3px solid #000;
+  border-radius: 20px;
+  background: var(--panel2);
+  padding: 14px;
+}
+
+.statusGrid span,
+.statusGrid strong {
+  display: block;
+}
+
+.statusGrid span {
+  color: var(--muted);
+  font-weight: 900;
+  margin-bottom: 5px;
+}
+
+.statusGrid strong {
+  font-size: 1.2rem;
+}
+
+.paymentBox {
+  margin: 18px 0;
+}
+
+.paymentBox p {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.linkBtn {
+  display: inline-block;
+  text-align: center;
+  color: var(--btnText);
+  text-decoration: none;
+}
+
+@keyframes rain {
+  from { transform: translate3d(0, -8%, 0); }
+  to { transform: translate3d(-8%, 8%, 0); }
+}
+
+@keyframes lightning {
+  0%, 92%, 100% { opacity: 0; }
+  93% { opacity: .32; }
+  94% { opacity: 0; }
+  96% { opacity: .22; }
+  97% { opacity: 0; }
+}
+
+@media (max-width: 800px) {
+  .header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .nav a {
+    flex: 1;
+    text-align: center;
+  }
+
+  .themeToggle {
+    margin-left: auto;
+  }
+
+  .hero,
+  .layout,
+  .statusGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .checkoutPanel {
+    position: static;
+  }
+
+  .productGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .productCard {
+    min-height: 138px;
+  }
+}
+
+@media (max-width: 420px) {
+  main,
+  .header {
+    width: min(100% - 18px, 1180px);
+  }
+
+  .productGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .brand small {
+    display: none;
+  }
+}

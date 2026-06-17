@@ -1,0 +1,329 @@
+/* =========================================================
+   v68a Halloween Theme Safe
+   Scope: visual theme only. No layout forcing.
+   ========================================================= */
+
+html.halloween {
+  color-scheme: dark;
+}
+
+html.halloween body {
+  color: #fff7ed;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(249, 115, 22, 0.22), transparent 26rem),
+    radial-gradient(circle at 88% 18%, rgba(168, 85, 247, 0.22), transparent 30rem),
+    radial-gradient(circle at 50% 100%, rgba(234, 88, 12, 0.14), transparent 26rem),
+    linear-gradient(135deg, #120617, #1f102e 44%, #431407) !important;
+  background-attachment: fixed;
+}
+
+/* Soft Halloween contrast only, no size/layout override */
+html.halloween #root {
+  color: #fff7ed;
+}
+
+html.halloween h1,
+html.halloween h2,
+html.halloween h3,
+html.halloween h4,
+html.halloween h5,
+html.halloween h6 {
+  color: #fff7ed;
+}
+
+html.halloween p,
+html.halloween span,
+html.halloween small,
+html.halloween li,
+html.halloween label {
+  color: inherit;
+}
+
+html.halloween .muted,
+html.halloween .subtitle,
+html.halloween .description,
+html.halloween .desc,
+html.halloween .helper,
+html.halloween .hint,
+html.halloween .note,
+html.halloween .caption,
+html.halloween .sectionSubtitle {
+  color: rgba(255, 237, 213, 0.78) !important;
+}
+
+/* Header and major surfaces */
+html.halloween header,
+html.halloween .header,
+html.halloween .siteHeader,
+html.halloween .navbar,
+html.halloween .topbar {
+  color: #fff7ed;
+  background: rgba(18, 6, 23, 0.66) !important;
+  border-color: rgba(251, 146, 60, 0.22) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+html.halloween header a,
+html.halloween .header a,
+html.halloween .siteHeader a,
+html.halloween .navbar a,
+html.halloween .topbar a {
+  color: #fed7aa !important;
+}
+
+/* Card style, but keep dimensions from existing CSS */
+html.halloween .card,
+html.halloween .categoryCard,
+html.halloween .productCard,
+html.halloween .checkoutCard,
+html.halloween .invoiceCard,
+html.halloween .orderCard,
+html.halloween .paymentCard,
+html.halloween .detailCard,
+html.halloween .summaryCard,
+html.halloween .statusBox,
+html.halloween .timeline,
+html.halloween .historyCard,
+html.halloween .serviceCard,
+html.halloween .methodCard,
+html.halloween .qrisBox,
+html.halloween .midtransBox,
+html.halloween [class*="Card"] {
+  color: #fff7ed;
+  background:
+    linear-gradient(135deg, rgba(88, 28, 135, 0.26), rgba(154, 52, 18, 0.18)),
+    rgba(18, 6, 23, 0.54) !important;
+  border-color: rgba(251, 146, 60, 0.24) !important;
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 237, 213, 0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+html.halloween .hero,
+html.halloween .heroCard,
+html.halloween .promo,
+html.halloween .promoBanner,
+html.halloween .banner {
+  color: #fff7ed;
+  background:
+    radial-gradient(circle at 90% 8%, rgba(251, 146, 60, 0.22), transparent 12rem),
+    linear-gradient(135deg, rgba(88, 28, 135, 0.38), rgba(154, 52, 18, 0.26)),
+    rgba(18, 6, 23, 0.58) !important;
+  border-color: rgba(251, 146, 60, 0.32) !important;
+}
+
+html.halloween .hero::after,
+html.halloween .heroCard::after,
+html.halloween .promo::after,
+html.halloween .promoBanner::after,
+html.halloween .banner::after {
+  content: "🎃";
+  position: absolute;
+  right: 18px;
+  top: 14px;
+  font-size: 56px;
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+/* Prices and important info */
+html.halloween .price,
+html.halloween .amount,
+html.halloween .total,
+html.halloween .grandTotal,
+html.halloween .paymentTotal {
+  color: #fdba74 !important;
+  text-shadow: 0 0 18px rgba(251, 146, 60, 0.22);
+}
+
+html.halloween .badge,
+html.halloween .statusBadge,
+html.halloween .paymentStatus,
+html.halloween .orderStatus {
+  color: #fff7ed !important;
+  background: rgba(88, 28, 135, 0.34) !important;
+  border-color: rgba(251, 146, 60, 0.28) !important;
+}
+
+/* Buttons */
+html.halloween button,
+html.halloween .btn,
+html.halloween .button {
+  border-color: rgba(251, 146, 60, 0.28);
+}
+
+html.halloween button[type="submit"],
+html.halloween .primaryButton,
+html.halloween .buyButton,
+html.halloween .checkoutButton,
+html.halloween .payButton {
+  color: #fff7ed !important;
+  background: linear-gradient(135deg, #ea580c, #7e22ce) !important;
+  border-color: rgba(251, 146, 60, 0.42) !important;
+  box-shadow: 0 14px 36px rgba(234, 88, 12, 0.24);
+}
+
+/* Inputs stay readable */
+html.halloween input,
+html.halloween select,
+html.halloween textarea {
+  color: #111827 !important;
+  background: rgba(255, 247, 237, 0.96) !important;
+  border-color: rgba(251, 146, 60, 0.36) !important;
+}
+
+html.halloween input::placeholder,
+html.halloween textarea::placeholder {
+  color: rgba(17, 24, 39, 0.54) !important;
+}
+
+/* Halloween effect layer */
+.v68-halloween-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  display: none;
+}
+
+html.halloween .v68-halloween-layer {
+  display: block;
+}
+
+.v68-halloween-moon {
+  position: absolute;
+  right: 8%;
+  top: 7%;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 34% 34%, #fff7ed, #fdba74 58%, rgba(251, 146, 60, 0.12) 72%);
+  box-shadow:
+    0 0 42px rgba(251, 146, 60, 0.32),
+    0 0 120px rgba(168, 85, 247, 0.18);
+  opacity: 0.58;
+}
+
+.v68-halloween-pumpkin {
+  position: absolute;
+  left: 5%;
+  bottom: 7%;
+  font-size: 54px;
+  opacity: 0.28;
+  filter: drop-shadow(0 0 20px rgba(251, 146, 60, 0.55));
+  animation: v68PumpkinGlow 3.8s ease-in-out infinite;
+}
+
+.v68-halloween-ghost,
+.v68-halloween-bat {
+  position: absolute;
+  opacity: 0;
+  filter: drop-shadow(0 0 18px rgba(255, 237, 213, 0.32));
+  animation: v68HalloweenFloat var(--dur) ease-in-out infinite;
+  animation-delay: var(--delay);
+}
+
+.v68-halloween-ghost {
+  font-size: 42px;
+}
+
+.v68-halloween-bat {
+  font-size: 28px;
+}
+
+@keyframes v68HalloweenFloat {
+  0% {
+    transform: translate3d(var(--x-start), 110vh, 0) scale(0.88) rotate(-4deg);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.30;
+  }
+  54% {
+    opacity: 0.42;
+  }
+  100% {
+    transform: translate3d(var(--x-end), -22vh, 0) scale(1.06) rotate(7deg);
+    opacity: 0;
+  }
+}
+
+@keyframes v68PumpkinGlow {
+  0%, 100% {
+    opacity: 0.22;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 0.42;
+    transform: translateY(-4px) scale(1.03);
+  }
+}
+
+/* Floating toggle */
+.v68-halloween-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 18px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.34);
+  color: #fff7ed;
+  background:
+    linear-gradient(135deg, rgba(88, 28, 135, 0.76), rgba(154, 52, 18, 0.72));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  user-select: none;
+}
+
+.v68-halloween-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.v68-halloween-toggle[data-active="true"] {
+  background:
+    linear-gradient(135deg, rgba(234, 88, 12, 0.88), rgba(126, 34, 206, 0.84));
+  border-color: rgba(253, 186, 116, 0.48);
+}
+
+@media (max-width: 640px) {
+  .v68-halloween-toggle {
+    right: 12px;
+    bottom: 14px;
+    min-height: 38px;
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  .v68-halloween-moon {
+    width: 64px;
+    height: 64px;
+    right: 8%;
+    top: 9%;
+  }
+
+  .v68-halloween-pumpkin {
+    font-size: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v68-halloween-ghost,
+  .v68-halloween-bat,
+  .v68-halloween-pumpkin {
+    animation: none !important;
+  }
+}

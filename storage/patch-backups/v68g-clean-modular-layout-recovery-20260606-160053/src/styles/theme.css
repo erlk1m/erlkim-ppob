@@ -1,0 +1,101 @@
+html[data-theme="halloween"] {
+  --bg: #14081f;
+  --bg2: #291036;
+  --panel: #21102d;
+  --panel2: #321747;
+  --text: #fff6df;
+  --muted: #f2c98a;
+  --border: #ff8a00;
+  --accent: #ff8a00;
+  --accent2: #b56cff;
+  --danger: #ff5b5b;
+  --btnText: #17091f;
+}
+
+html[data-theme="storm"] {
+  --bg: #06101d;
+  --bg2: #10243d;
+  --panel: #0f1b2e;
+  --panel2: #162944;
+  --text: #eff8ff;
+  --muted: #b8dcff;
+  --border: #68d8ff;
+  --accent: #68d8ff;
+  --accent2: #ffe66d;
+  --danger: #ff7070;
+  --btnText: #06101d;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 28%, transparent), transparent 32rem),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--accent2) 20%, transparent), transparent 36rem),
+    linear-gradient(135deg, var(--bg), var(--bg2));
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+  background-size: 42px 42px;
+  opacity: .5;
+}
+
+.weatherLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+html[data-theme="halloween"] .weatherLayer::before {
+  content: "🎃 🦇 👻";
+  position: absolute;
+  inset: 0;
+  opacity: .12;
+  font-size: 4rem;
+  word-spacing: 3rem;
+  line-height: 8rem;
+  transform: rotate(-8deg);
+}
+
+html[data-theme="storm"] .weatherLayer::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background-image: repeating-linear-gradient(
+    110deg,
+    rgba(255,255,255,.34) 0 1px,
+    transparent 1px 13px
+  );
+  opacity: .28;
+  animation: rain .42s linear infinite;
+}
+
+html[data-theme="storm"] .weatherLayer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: lightning 6s infinite;
+}
+
+@keyframes rain {
+  from { transform: translate3d(0, -8%, 0); }
+  to { transform: translate3d(-8%, 8%, 0); }
+}
+
+@keyframes lightning {
+  0%, 92%, 100% { opacity: 0; }
+  93% { opacity: .32; }
+  94% { opacity: 0; }
+  96% { opacity: .22; }
+  97% { opacity: 0; }
+}

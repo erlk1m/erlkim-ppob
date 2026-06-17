@@ -1,0 +1,676 @@
+/* =========================================================
+   v67b Force Modular Phone Shell
+   Goal: make current real store visually closer to uploaded
+   ppob_app_modular.tsx without replacing real API logic.
+   Scope: web/store only.
+   ========================================================= */
+
+:root {
+  --v67b-bg-a: #020617;
+  --v67b-bg-b: #0f172a;
+  --v67b-bg-c: #1e1b4b;
+  --v67b-card: rgba(15, 23, 42, 0.58);
+  --v67b-card-2: rgba(15, 23, 42, 0.76);
+  --v67b-border: rgba(255, 255, 255, 0.14);
+  --v67b-border-2: rgba(147, 197, 253, 0.34);
+  --v67b-text: #ffffff;
+  --v67b-muted: rgba(191, 219, 254, 0.78);
+  --v67b-accent: #818cf8;
+  --v67b-accent-2: #38bdf8;
+  --v67b-radius: 24px;
+  --v67b-shadow: 0 30px 100px rgba(0, 0, 0, 0.48);
+}
+
+html,
+body {
+  min-height: 100%;
+  width: 100%;
+}
+
+body {
+  margin: 0 !important;
+  color: var(--v67b-text) !important;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(129, 140, 248, 0.24), transparent 320px),
+    radial-gradient(circle at 86% 20%, rgba(56, 189, 248, 0.18), transparent 360px),
+    radial-gradient(circle at 50% 100%, rgba(14, 165, 233, 0.12), transparent 320px),
+    linear-gradient(135deg, var(--v67b-bg-a), var(--v67b-bg-b) 48%, var(--v67b-bg-c)) !important;
+  background-attachment: fixed !important;
+  overflow: hidden !important;
+}
+
+/* =========================================================
+   REAL PHONE APP FRAME
+   ========================================================= */
+
+#root {
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-width: 430px !important;
+  margin: 0 auto !important;
+  overflow: hidden !important;
+  color: var(--v67b-text) !important;
+  background: rgba(0, 0, 0, 0.22) !important;
+  position: relative !important;
+  box-shadow: var(--v67b-shadow) !important;
+}
+
+@media (min-width: 640px) {
+  body {
+    display: grid !important;
+    place-items: center !important;
+    padding: 18px !important;
+  }
+
+  #root {
+    height: min(94dvh, 900px) !important;
+    min-height: min(94dvh, 900px) !important;
+    border-radius: 32px !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    outline: 1px solid rgba(255, 255, 255, 0.05) !important;
+  }
+}
+
+/* Make first app child behave like phone screen */
+#root > * {
+  min-height: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  color: var(--v67b-text) !important;
+}
+
+/* Main content scroll like app */
+#root main,
+#root [role="main"],
+#root .main,
+#root .content,
+#root .container,
+#root .page,
+#root .pageContent,
+#root .homePage,
+#root .checkoutPage,
+#root .invoicePage,
+#root .categoryPage,
+#root .productPage {
+  max-width: 100% !important;
+  width: 100% !important;
+  color: var(--v67b-text) !important;
+}
+
+/* Prefer app-style scroll area after header */
+#root main,
+#root [role="main"],
+#root .mainContent,
+#root .pageContent {
+  height: calc(100dvh - 74px) !important;
+  overflow-y: auto !important;
+  padding: 22px !important;
+  scrollbar-width: none !important;
+}
+
+#root main::-webkit-scrollbar,
+#root [role="main"]::-webkit-scrollbar,
+#root .mainContent::-webkit-scrollbar,
+#root .pageContent::-webkit-scrollbar {
+  display: none !important;
+}
+
+@media (min-width: 640px) {
+  #root main,
+  #root [role="main"],
+  #root .mainContent,
+  #root .pageContent {
+    height: calc(min(94dvh, 900px) - 74px) !important;
+  }
+}
+
+/* =========================================================
+   HEADER LIKE DEMO APP
+   ========================================================= */
+
+#root header,
+#root .header,
+#root .siteHeader,
+#root .navbar,
+#root .topbar {
+  height: 74px !important;
+  min-height: 74px !important;
+  padding: 18px 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  color: #ffffff !important;
+  background: rgba(0, 0, 0, 0.22) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  box-shadow: none !important;
+}
+
+#root header *,
+#root .header *,
+#root .siteHeader *,
+#root .navbar *,
+#root .topbar * {
+  color: #ffffff !important;
+}
+
+#root header h1,
+#root header h2,
+#root .header h1,
+#root .siteHeader h1,
+#root .navbar h1,
+#root .topbar h1 {
+  font-size: 20px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.04em !important;
+  margin: 0 !important;
+}
+
+#root header nav,
+#root .header nav,
+#root .siteHeader nav,
+#root .navbar nav {
+  display: flex !important;
+  gap: 8px !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+}
+
+#root header nav::-webkit-scrollbar,
+#root .header nav::-webkit-scrollbar,
+#root .siteHeader nav::-webkit-scrollbar,
+#root .navbar nav::-webkit-scrollbar {
+  display: none !important;
+}
+
+#root header a,
+#root .header a,
+#root .siteHeader a,
+#root .navbar a,
+#root .topbar a {
+  white-space: nowrap !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 8px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.10) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  text-decoration: none !important;
+}
+
+/* Hide desktop-ish footer in phone-shell mode */
+#root footer,
+#root .footer,
+#root .siteFooter {
+  display: none !important;
+}
+
+/* =========================================================
+   TYPOGRAPHY
+   ========================================================= */
+
+#root h1,
+#root h2,
+#root h3,
+#root h4,
+#root h5,
+#root h6 {
+  color: #ffffff !important;
+  letter-spacing: -0.045em !important;
+}
+
+#root h1 {
+  font-size: clamp(26px, 8vw, 34px) !important;
+  line-height: 0.95 !important;
+}
+
+#root h2 {
+  font-size: clamp(22px, 6vw, 28px) !important;
+  line-height: 1.05 !important;
+}
+
+#root h3 {
+  font-size: 16px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+}
+
+#root p,
+#root span,
+#root small,
+#root li,
+#root label {
+  color: inherit !important;
+}
+
+#root .muted,
+#root .subtitle,
+#root .description,
+#root .desc,
+#root .helper,
+#root .hint,
+#root .note,
+#root .caption,
+#root [class*="muted" i],
+#root [class*="subtitle" i],
+#root [class*="description" i],
+#root [class*="helper" i],
+#root [class*="hint" i] {
+  color: var(--v67b-muted) !important;
+}
+
+/* =========================================================
+   HERO / PROMO BANNER LIKE FILE DEMO
+   ========================================================= */
+
+#root .hero,
+#root .heroCard,
+#root .promo,
+#root .promoBanner,
+#root .banner,
+#root [class*="hero" i],
+#root [class*="promo" i],
+#root [class*="banner" i] {
+  position: relative !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  min-height: 168px !important;
+  padding: 24px !important;
+  margin: 0 0 24px 0 !important;
+  border-radius: 28px !important;
+  color: #ffffff !important;
+  background:
+    linear-gradient(135deg, rgba(79, 70, 229, 0.26), rgba(14, 165, 233, 0.16)),
+    rgba(15, 23, 42, 0.52) !important;
+  border: 1px solid var(--v67b-border) !important;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: blur(22px) !important;
+  -webkit-backdrop-filter: blur(22px) !important;
+}
+
+#root .hero::after,
+#root .heroCard::after,
+#root .promo::after,
+#root .promoBanner::after,
+#root .banner::after,
+#root [class*="hero" i]::after,
+#root [class*="promo" i]::after,
+#root [class*="banner" i]::after {
+  content: "⚡" !important;
+  position: absolute !important;
+  right: -10px !important;
+  top: -22px !important;
+  font-size: 118px !important;
+  line-height: 1 !important;
+  opacity: 0.10 !important;
+  transform: rotate(10deg) !important;
+  pointer-events: none !important;
+}
+
+#root .hero h1,
+#root .hero h2,
+#root .promo h1,
+#root .promo h2,
+#root .banner h1,
+#root .banner h2,
+#root [class*="hero" i] h1,
+#root [class*="hero" i] h2,
+#root [class*="promo" i] h1,
+#root [class*="promo" i] h2,
+#root [class*="banner" i] h1,
+#root [class*="banner" i] h2 {
+  margin-bottom: 10px !important;
+}
+
+/* =========================================================
+   SERVICE / CATEGORY GRID 3 COLUMNS
+   ========================================================= */
+
+#root .categoryGrid,
+#root .categoriesGrid,
+#root .serviceGrid,
+#root .servicesGrid,
+#root [class*="categoryGrid" i],
+#root [class*="categoriesGrid" i],
+#root [class*="serviceGrid" i],
+#root [class*="servicesGrid" i],
+#root [class*="category-list" i],
+#root [class*="categories-list" i],
+#root [class*="service-list" i] {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  margin: 14px 0 24px 0 !important;
+}
+
+/* If grid has category children but class name is generic */
+#root div:has(> a[href*="category"]),
+#root div:has(> a[href*="kategori"]),
+#root div:has(> button[class*="category" i]),
+#root div:has(> [class*="categoryCard" i]) {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+}
+
+/* Category app buttons */
+#root .categoryCard,
+#root .serviceCard,
+#root .category-item,
+#root .service-item,
+#root [class*="categoryCard" i],
+#root [class*="serviceCard" i],
+#root [class*="category-item" i],
+#root [class*="service-item" i],
+#root a[href*="category"],
+#root a[href*="kategori"] {
+  min-height: 104px !important;
+  width: 100% !important;
+  padding: 12px 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  text-align: center !important;
+  color: #ffffff !important;
+  text-decoration: none !important;
+  border-radius: 22px !important;
+  background: rgba(15, 23, 42, 0.50) !important;
+  border: 1px solid var(--v67b-border) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18) !important;
+}
+
+#root .categoryCard:hover,
+#root .serviceCard:hover,
+#root .category-item:hover,
+#root .service-item:hover,
+#root [class*="categoryCard" i]:hover,
+#root [class*="serviceCard" i]:hover,
+#root a[href*="category"]:hover,
+#root a[href*="kategori"]:hover {
+  transform: translateY(-2px) !important;
+  border-color: var(--v67b-border-2) !important;
+  background: rgba(30, 41, 59, 0.68) !important;
+}
+
+#root .categoryCard svg,
+#root .serviceCard svg,
+#root .category-item svg,
+#root .service-item svg,
+#root [class*="category" i] svg,
+#root [class*="service" i] svg {
+  width: 26px !important;
+  height: 26px !important;
+  filter: drop-shadow(0 0 18px rgba(129, 140, 248, 0.34)) !important;
+}
+
+#root .categoryCard span,
+#root .serviceCard span,
+#root .category-item span,
+#root .service-item span,
+#root [class*="categoryCard" i] span,
+#root [class*="serviceCard" i] span {
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  color: rgba(219, 234, 254, 0.86) !important;
+}
+
+/* =========================================================
+   PRODUCT / TRANSACTION LIST LIKE APP
+   ========================================================= */
+
+#root .productGrid,
+#root .productsGrid,
+#root [class*="productGrid" i],
+#root [class*="productsGrid" i] {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+#root .card,
+#root .productCard,
+#root .product-item,
+#root .orderCard,
+#root .historyCard,
+#root .checkoutCard,
+#root .invoiceCard,
+#root .paymentCard,
+#root .summaryCard,
+#root .detailCard,
+#root .statusBox,
+#root .timeline,
+#root .methodCard,
+#root [class*="Card"],
+#root [class*="card"] {
+  color: #ffffff !important;
+  background: var(--v67b-card) !important;
+  border: 1px solid var(--v67b-border) !important;
+  border-radius: var(--v67b-radius) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+}
+
+#root .productCard,
+#root .product-item,
+#root [class*="product-card" i],
+#root [class*="productCard" i] {
+  width: 100% !important;
+  min-height: 82px !important;
+  padding: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+}
+
+#root .productCard:hover,
+#root .product-item:hover,
+#root [class*="product-card" i]:hover,
+#root [class*="productCard" i]:hover {
+  transform: translateY(-1px) !important;
+  background: rgba(30, 41, 59, 0.72) !important;
+  border-color: var(--v67b-border-2) !important;
+}
+
+#root .price,
+#root .amount,
+#root .total,
+#root .grandTotal,
+#root .paymentTotal,
+#root [class*="price" i],
+#root [class*="amount" i],
+#root [class*="total" i] {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+#root .productCard .price,
+#root .product-item .price,
+#root [class*="product" i] [class*="price" i] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 12px !important;
+  padding: 7px 10px !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  color: var(--v67b-accent-2) !important;
+  border: 1px solid rgba(147, 197, 253, 0.18) !important;
+  font-size: 13px !important;
+}
+
+/* =========================================================
+   FORMS LIKE DEMO CATEGORY PAGE
+   ========================================================= */
+
+#root form,
+#root .form,
+#root .searchBox,
+#root .inputBox,
+#root .checkoutForm,
+#root [class*="search" i],
+#root [class*="inputBox" i],
+#root [class*="checkoutForm" i] {
+  color: #ffffff !important;
+}
+
+#root input,
+#root select,
+#root textarea {
+  width: 100% !important;
+  min-height: 46px !important;
+  color: #ffffff !important;
+  background: rgba(0, 0, 0, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 16px !important;
+  padding: 12px 14px !important;
+  outline: none !important;
+}
+
+#root input:focus,
+#root select:focus,
+#root textarea:focus {
+  border-color: rgba(147, 197, 253, 0.68) !important;
+  box-shadow: 0 0 0 4px rgba(147, 197, 253, 0.14) !important;
+}
+
+#root input::placeholder,
+#root textarea::placeholder {
+  color: rgba(255, 255, 255, 0.34) !important;
+}
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+#root button,
+#root .btn,
+#root .button,
+#root [class*="button" i],
+#root [class*="btn" i] {
+  border-radius: 16px !important;
+  font-weight: 800 !important;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease !important;
+}
+
+#root button:hover,
+#root .btn:hover,
+#root .button:hover,
+#root [class*="button" i]:hover,
+#root [class*="btn" i]:hover {
+  transform: translateY(-1px) !important;
+}
+
+#root button[type="submit"],
+#root .primaryButton,
+#root .buyButton,
+#root .checkoutButton,
+#root .payButton,
+#root [class*="primary" i],
+#root [class*="buy" i],
+#root [class*="checkout" i],
+#root [class*="pay" i] {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.78), rgba(14, 165, 233, 0.68)) !important;
+  border: 1px solid rgba(191, 219, 254, 0.24) !important;
+  box-shadow: 0 16px 40px rgba(37, 99, 235, 0.22) !important;
+}
+
+/* Back button / icon button */
+#root button:has(svg) {
+  min-width: 42px;
+  min-height: 42px;
+}
+
+/* =========================================================
+   MODAL / CONFIRMATION LIKE DEMO
+   ========================================================= */
+
+#root .modal,
+#root .dialog,
+#root .sheet,
+#root .confirmBox,
+#root [class*="modal" i],
+#root [class*="dialog" i],
+#root [class*="sheet" i],
+#root [class*="confirm" i] {
+  color: #ffffff !important;
+  background: rgba(15, 23, 42, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 28px !important;
+  box-shadow: var(--v67b-shadow) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+}
+
+/* =========================================================
+   RAIN / STORM MODE
+   ========================================================= */
+
+html.rainstorm body {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(129, 140, 248, 0.28), transparent 320px),
+    radial-gradient(circle at 86% 20%, rgba(56, 189, 248, 0.18), transparent 360px),
+    linear-gradient(135deg, #020617, #0f172a 48%, #1e1b4b) !important;
+}
+
+html.rainstorm #root {
+  background: rgba(0, 0, 0, 0.28) !important;
+}
+
+html.rainstorm #root .card,
+html.rainstorm #root .productCard,
+html.rainstorm #root .categoryCard,
+html.rainstorm #root [class*="Card"],
+html.rainstorm #root [class*="card"] {
+  background: rgba(15, 23, 42, 0.68) !important;
+}
+
+/* =========================================================
+   SAFETY MOBILE
+   ========================================================= */
+
+@media (max-width: 430px) {
+  #root main,
+  #root [role="main"],
+  #root .mainContent,
+  #root .pageContent {
+    padding: 18px !important;
+  }
+
+  #root .categoryGrid,
+  #root .categoriesGrid,
+  #root .serviceGrid,
+  #root .servicesGrid,
+  #root [class*="categoryGrid" i],
+  #root [class*="categoriesGrid" i],
+  #root [class*="serviceGrid" i],
+  #root [class*="servicesGrid" i],
+  #root div:has(> a[href*="category"]),
+  #root div:has(> a[href*="kategori"]) {
+    gap: 10px !important;
+  }
+
+  #root .categoryCard,
+  #root .serviceCard,
+  #root .category-item,
+  #root .service-item,
+  #root [class*="categoryCard" i],
+  #root [class*="serviceCard" i],
+  #root a[href*="category"],
+  #root a[href*="kategori"] {
+    min-height: 92px !important;
+    padding: 10px 6px !important;
+  }
+}

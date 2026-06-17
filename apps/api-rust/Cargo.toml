@@ -1,0 +1,21 @@
+[package]
+name = "api-rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.9"
+chrono = { version = "0.4.45", features = ["serde"] }
+dotenvy = "0.15.7"
+hex = "0.4.3"
+hmac = "0.13.0"
+md-5 = "0.11.0"
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "native-tls"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sha1 = "0.11.0"
+sha2 = "0.10.8"
+sqlx = { version = "0.9.0", features = ["chrono", "postgres", "runtime-tokio", "tls-rustls"] }
+tokio = { version = "1.52.3", features = ["full"] }
+tower-http = { version = "0.6.11", features = ["cors", "trace"] }
+uuid = { version = "1.23.2", features = ["v4"] }

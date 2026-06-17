@@ -1,0 +1,297 @@
+export type DigiflazzTxnStatus = 'success' | 'failed' | 'pending';
+export type DigiflazzOrderStatus = 'success' | 'failed' | 'processing' | 'need_check';
+export type DigiflazzPriceListKind = 'prepaid' | 'postpaid';
+
+export const DIGIFLAZZ_ENDPOINTS = {
+  checkBalance: '/cek-saldo',
+  priceList: '/price-list',
+  transaction: '/transaction',
+  inquiryPln: '/inquiry-pln'
+} as const;
+
+export const DIGIFLAZZ_COMMANDS = {
+  checkBalance: 'deposit',
+  priceListPrepaid: 'prepaid',
+  priceListPostpaid: 'pasca',
+  postpaidInquiry: 'inq-pasca',
+  postpaidPayment: 'pay-pasca',
+  postpaidStatus: 'status-pasca'
+} as const;
+
+export const DIGIFLAZZ_SIGNATURE_SEEDS = {
+  checkBalance: 'depo',
+  priceList: 'pricelist'
+} as const;
+
+export const DIGIFLAZZ_TESTING = String(process.env.DIGIFLAZZ_TESTING || '').toLowerCase() === 'true';
+
+export const DIGIFLAZZ_TESTING_SKU_ALIAS: Record<string, string> = {
+  // Katalog real/development baru -> SKU test-case Digiflazz development.
+  // UI/database tetap menyimpan SKU asli dari price-list. Alias hanya dipakai saat request ke Digiflazz jika DIGIFLAZZ_TESTING=true.
+  PLNPOSTPAID: 'pln',
+  BPJSB: 'bpjs',
+  PDAM: 'pdam',
+  PDAMPOSTPAID: 'pdam'
+};
+
+export const DIGIFLAZZ_RESPONSE_CODES: Record<string, {
+  message: string;
+  status: DigiflazzTxnStatus;
+  transactionCreated: boolean;
+  description?: string;
+  retryable?: boolean;
+}> = {
+  '00': { message: 'Transaksi Sukses', status: 'success', transactionCreated: true },
+  '01': { message: 'Timeout', status: 'failed', transactionCreated: true, retryable: true },
+  '02': { message: 'Transaksi Gagal', status: 'failed', transactionCreated: true },
+  '03': { message: 'Transaksi Pending', status: 'pending', transactionCreated: true, retryable: true },
+  '40': { message: 'Payload Error', status: 'failed', transactionCreated: false, description: 'Tipe data atau parameter tidak sesuai' },
+  '41': { message: 'Signature tidak valid', status: 'failed', transactionCreated: false, description: 'Cek formula signature dan apiKey mode Development/Production' },
+  '42': { message: 'Gagal memproses API Buyer', status: 'failed', transactionCreated: false, description: 'Username belum sesuai' },
+  '43': { message: 'SKU tidak ditemukan atau Non-Aktif', status: 'failed', transactionCreated: false },
+  '44': { message: 'Saldo tidak cukup', status: 'failed', transactionCreated: false },
+  '45': { message: 'IP tidak dikenali', status: 'failed', transactionCreated: false, description: 'Whitelist IP di pengaturan koneksi sesuai mode API' },
+  '47': { message: 'Transaksi sudah terjadi di buyer lain', status: 'failed', transactionCreated: false },
+  '49': { message: 'Ref ID tidak unik', status: 'failed', transactionCreated: false },
+  '50': { message: 'Transaksi Tidak Ditemukan', status: 'failed', transactionCreated: true },
+  '51': { message: 'Nomor Tujuan Diblokir', status: 'failed', transactionCreated: true },
+  '52': { message: 'Prefix Tidak Sesuai Dengan Operator', status: 'failed', transactionCreated: true },
+  '53': { message: 'Produk Seller Sedang Tidak Tersedia', status: 'failed', transactionCreated: true, retryable: true },
+  '54': { message: 'Nomor Tujuan Salah', status: 'failed', transactionCreated: true },
+  '55': { message: 'Produk Sedang Gangguan', status: 'failed', transactionCreated: true, retryable: true },
+  '56': { message: 'Limit saldo seller', status: 'failed', transactionCreated: false, description: 'Deprecated' },
+  '57': { message: 'Jumlah Digit Kurang Atau Lebih', status: 'failed', transactionCreated: true },
+  '58': { message: 'Sedang Cut Off', status: 'failed', transactionCreated: true, retryable: true },
+  '59': { message: 'Tujuan di Luar Wilayah/Cluster', status: 'failed', transactionCreated: true },
+  '60': { message: 'Tagihan belum tersedia', status: 'failed', transactionCreated: true },
+  '61': { message: 'Belum pernah melakukan deposit', status: 'failed', transactionCreated: false },
+  '62': { message: 'Seller sedang mengalami gangguan', status: 'failed', transactionCreated: false, retryable: true },
+  '63': { message: 'Tidak support transaksi multi', status: 'failed', transactionCreated: false },
+  '64': { message: 'Tarik tiket gagal, coba nominal lain atau hubungi admin', status: 'failed', transactionCreated: false },
+  '65': { message: 'Limit transaksi multi', status: 'failed', transactionCreated: false, description: 'Deprecated' },
+  '66': { message: 'Cut Off Perbaikan Sistem Seller', status: 'failed', transactionCreated: false, retryable: true },
+  '67': { message: 'Seller belum ter-verifikasi', status: 'failed', transactionCreated: false },
+  '68': { message: 'Stok habis', status: 'failed', transactionCreated: false, retryable: true },
+  '69': { message: 'Harga seller lebih besar dari ketentuan harga Buyer', status: 'failed', transactionCreated: false },
+  '70': { message: 'Timeout Dari Biller', status: 'failed', transactionCreated: true, retryable: true },
+  '71': { message: 'Produk Sedang Tidak Stabil', status: 'failed', transactionCreated: true, retryable: true },
+  '72': { message: 'Lakukan Unreg Paket Dahulu', status: 'failed', transactionCreated: true },
+  '73': { message: 'Kwh Melebihi Batas', status: 'failed', transactionCreated: true },
+  '74': { message: 'Transaksi Refund', status: 'failed', transactionCreated: true },
+  '80': { message: 'Akun Anda telah diblokir oleh Seller', status: 'failed', transactionCreated: false },
+  '81': { message: 'Seller ini telah diblokir oleh Anda', status: 'failed', transactionCreated: false },
+  '82': { message: 'Akun Anda belum ter-verifikasi', status: 'failed', transactionCreated: false },
+  '83': { message: 'Limitasi pengecekan pricelist', status: 'failed', transactionCreated: false, description: 'Pricelist semua produk maksimal 5 menit 1x; per kode maksimal 1x per detik', retryable: true }
+};
+
+export const DIGIFLAZZ_WEBHOOK = {
+  signatureHeader: 'x-hub-signature',
+  eventHeader: 'x-digiflazz-event',
+  signaturePrefix: 'sha1=',
+  hmacAlgorithm: 'sha1',
+  events: {
+    create: 'Transaksi baru terjadi',
+    update: 'Transaksi berubah status',
+    resend: 'Resend report / khusus hotel'
+  },
+  userAgents: {
+    'Digiflazz-Hookshot': 'prepaid',
+    'Digiflazz-Pasca-Hookshot': 'postpaid',
+    'Digiflazz-Hotel-Hookshot': 'hotel'
+  }
+} as const;
+
+export const DIGIFLAZZ_TEST_CASES = {
+  prepaid: [
+    { buyerSkuCode: 'xld10', customerNo: '087800001230', expected: 'success', rc: '00', note: 'Sukses' },
+    { buyerSkuCode: 'xld10', customerNo: '087800001232', expected: 'failed', rc: '02', note: 'Gagal' },
+    { buyerSkuCode: 'xld10', customerNo: '087800001233', expected: 'pending_then_success', rc: '03', note: 'Pending kemudian callback sukses' },
+    { buyerSkuCode: 'xld10', customerNo: '087800001234', expected: 'pending_then_failed', rc: '03', note: 'Pending kemudian callback gagal' }
+  ],
+  postpaid: {
+    pln: [
+      { customerNo: '530000000001', expected: 'success_1_bill' },
+      { customerNo: '530000000002', expected: 'success_2_bills' },
+      { customerNo: '530000000003', expected: 'inquiry_failed' },
+      { customerNo: '530000000006', expected: 'payment_failed' },
+      { customerNo: '630000000001', expected: 'pending_then_success_1_bill' },
+      { customerNo: '630000000002', expected: 'pending_then_success_2_bills' },
+      { customerNo: '630000000006', expected: 'pending_then_failed' }
+    ],
+    pdam: [
+      { customerNo: '1013226', expected: 'success' },
+      { customerNo: '1013227', expected: 'inquiry_failed' },
+      { customerNo: '1013230', expected: 'payment_failed' },
+      { customerNo: '2013226', expected: 'pending_then_success' },
+      { customerNo: '2013230', expected: 'pending_then_failed' }
+    ],
+    internet: [
+      { customerNo: '6391601001', expected: 'success' },
+      { customerNo: '6391601002', expected: 'inquiry_failed' },
+      { customerNo: '6391601005', expected: 'payment_failed' },
+      { customerNo: '7391601001', expected: 'pending_then_success' },
+      { customerNo: '7391601005', expected: 'pending_then_failed' }
+    ],
+    bpjs: [
+      { customerNo: '8801234560001', expected: 'success' },
+      { customerNo: '8801234560002', expected: 'inquiry_failed' },
+      { customerNo: '8801234560005', expected: 'payment_failed' },
+      { customerNo: '9801234560001', expected: 'pending_then_success' },
+      { customerNo: '9801234560005', expected: 'pending_then_failed' }
+    ],
+    multifinance: [
+      { customerNo: '6391601201', expected: 'success' },
+      { customerNo: '6391601202', expected: 'inquiry_failed' },
+      { customerNo: '6391601205', expected: 'payment_failed' },
+      { customerNo: '7391601201', expected: 'pending_then_success' },
+      { customerNo: '7391601205', expected: 'pending_then_failed' }
+    ],
+    pbb: [
+      { buyerSkuCode: 'cimahi', customerNo: '329801092375999991', expected: 'success' },
+      { buyerSkuCode: 'cimahi', customerNo: '329801092375999992', expected: 'inquiry_failed' },
+      { buyerSkuCode: 'cimahi', customerNo: '329801092375999995', expected: 'payment_failed' },
+      { buyerSkuCode: 'cimahi', customerNo: '429801092375999991', expected: 'pending_then_success' },
+      { buyerSkuCode: 'cimahi', customerNo: '429801092375999995', expected: 'pending_then_failed' }
+    ],
+    pdl: [
+      { customerNo: '3298010921', expected: 'success' },
+      { customerNo: '3298010922', expected: 'inquiry_failed' },
+      { customerNo: '3298010923', expected: 'payment_failed' },
+      { customerNo: '4298010921', expected: 'pending_then_success' },
+      { customerNo: '4298010923', expected: 'pending_then_failed' }
+    ],
+    pgas: [
+      { customerNo: '0110014601', expected: 'success_1_bill' },
+      { customerNo: '0110014602', expected: 'success_2_bills' },
+      { customerNo: '0110014603', expected: 'inquiry_failed' },
+      { customerNo: '0110014605', expected: 'payment_failed' },
+      { customerNo: '1110014601', expected: 'pending_then_success_1_bill' },
+      { customerNo: '1110014602', expected: 'pending_then_success_2_bills' },
+      { customerNo: '1110014605', expected: 'pending_then_failed' }
+    ],
+    tv: [
+      { customerNo: '127246500101', expected: 'success' },
+      { customerNo: '127246500102', expected: 'inquiry_failed' },
+      { customerNo: '127246500105', expected: 'payment_failed' },
+      { customerNo: '227246500101', expected: 'pending_then_success' },
+      { customerNo: '227246500105', expected: 'pending_then_failed' }
+    ],
+    bpjstk: [
+      { customerNo: '8102051011270001', expected: 'success' },
+      { customerNo: '8102051011270002', expected: 'inquiry_failed' },
+      { customerNo: '8102051011270003', expected: 'payment_failed' },
+      { customerNo: '9102051011270001', expected: 'pending_then_success' },
+      { customerNo: '9102051011270003', expected: 'pending_then_failed' }
+    ],
+    bpjstkpu: [
+      { customerNo: '400000100001', expected: 'success' },
+      { customerNo: '400000100002', expected: 'inquiry_failed' },
+      { customerNo: '400000100003', expected: 'payment_failed' },
+      { customerNo: '500000100001', expected: 'pending_then_success' },
+      { customerNo: '500000100003', expected: 'pending_then_failed' }
+    ],
+    plnnontaglist: [
+      { customerNo: '3225030005921', expected: 'success' },
+      { customerNo: '3225030005922', expected: 'inquiry_failed' },
+      { customerNo: '3225030005923', expected: 'payment_failed' },
+      { customerNo: '4225030005921', expected: 'pending_then_success' },
+      { customerNo: '4225030005923', expected: 'pending_then_failed' }
+    ],
+    emoney: [
+      { customerNo: '082100000001', expected: 'success' },
+      { customerNo: '082100000002', expected: 'inquiry_failed' },
+      { customerNo: '082100000003', expected: 'payment_failed' },
+      { customerNo: '082110000001', expected: 'pending_then_success' },
+      { customerNo: '082110000003', expected: 'pending_then_failed' }
+    ],
+    samsat: [
+      { customerNo: '9658548523568701,0212502110170100', expected: 'success' },
+      { customerNo: '9658548523568702,0212502110170100', expected: 'inquiry_failed' },
+      { customerNo: '9658548523568705,0212502110170100', expected: 'payment_failed' },
+      { customerNo: '0658548523568701,0212502110170100', expected: 'pending_then_success' },
+      { customerNo: '0658548523568705,0212502110170100', expected: 'pending_then_failed' }
+    ]
+  }
+} as const;
+
+export const DIGIFLAZZ_BILLER_FIELD_MAP = {
+  standard: ['ref_id', 'customer_no', 'customer_name', 'buyer_sku_code', 'admin', 'message', 'status', 'rc', 'buyer_last_saldo', 'price', 'selling_price', 'desc'],
+  paymentOnly: ['sn'],
+  plnDesc: ['tarif', 'daya', 'lembar_tagihan', 'detail[].periode', 'detail[].nilai_tagihan', 'detail[].admin', 'detail[].denda', 'detail[].meter_awal', 'detail[].meter_akhir'],
+  pdamDesc: ['tarif', 'lembar_tagihan', 'alamat', 'jatuh_tempo', 'detail[].periode', 'detail[].nilai_tagihan', 'detail[].denda', 'detail[].meter_awal', 'detail[].meter_akhir', 'detail[].biaya_lain'],
+  bpjsDesc: ['jumlah_peserta', 'lembar_tagihan', 'alamat', 'detail[].periode'],
+  samsatCustomerNoFormat: 'kode_pembayaran,nomor_identitas',
+  emoneyExtraRequest: ['amount']
+} as const;
+
+export function normalizeDigiflazzStatus(status?: string, rc?: string): DigiflazzOrderStatus {
+  const code = String(rc || '').trim();
+  const statusText = String(status || '').trim().toLowerCase();
+  if (code && DIGIFLAZZ_RESPONSE_CODES[code]) {
+    const mapped = DIGIFLAZZ_RESPONSE_CODES[code].status;
+    if (mapped === 'success') return 'success';
+    if (mapped === 'pending') return 'processing';
+    return 'failed';
+  }
+  if (['sukses', 'success'].includes(statusText)) return 'success';
+  if (['pending', 'process', 'processing'].includes(statusText)) return 'processing';
+  if (['gagal', 'failed', 'fail'].includes(statusText)) return 'failed';
+  return 'need_check';
+}
+
+export function responseCodeInfo(rc?: string) {
+  return DIGIFLAZZ_RESPONSE_CODES[String(rc || '').trim()] || null;
+}
+
+export function isDigiflazzTestingMode(explicit?: boolean) {
+  if (typeof explicit === 'boolean') return explicit;
+  return isDigiflazzTestingMode(explicit);
+}
+
+export function resolveDigiflazzTestingSku(buyerSkuCode: string, explicitTesting?: boolean) {
+  const sku = String(buyerSkuCode || '').trim();
+  if (!sku) return sku;
+  if (!isDigiflazzTestingMode(explicitTesting)) return sku;
+
+  const exact = DIGIFLAZZ_TESTING_SKU_ALIAS[sku];
+  if (exact) return exact;
+
+  const upper = sku.toUpperCase();
+  return DIGIFLAZZ_TESTING_SKU_ALIAS[upper] || sku;
+}
+
+export function shouldSendTestingParam(explicit?: boolean) {
+  if (typeof explicit === 'boolean') return explicit;
+  return DIGIFLAZZ_TESTING || process.env.DIGIFLAZZ_MODE !== 'real';
+}
+
+export function mapDigiflazzCatalogCategory(input: {
+  sourceType: DigiflazzPriceListKind;
+  category?: string;
+  brand?: string;
+  name?: string;
+  buyerSkuCode?: string;
+}) {
+  const rawCategory = String(input.category || '').toLowerCase();
+  const rawBrand = String(input.brand || '').toLowerCase();
+  const rawName = String(input.name || '').toLowerCase();
+  const rawSku = String(input.buyerSkuCode || '').toLowerCase();
+  const text = `${rawCategory} ${rawBrand} ${rawName} ${rawSku}`;
+
+  if (input.sourceType === 'postpaid') return 'tagihan';
+  if (/^pln|\bpln\b|token|listrik/.test(text)) return 'token-pln';
+  if (/dana|go\s*pay|gopay|ovo|shopee\s*pay|linkaja|doku|i\.saku|isaku|emoney|e-money|wallet/.test(text)) return 'emoney';
+  if (/mobile legends|mobilelegend|free fire|diamond|google play|playstation|psn|voucher game|game/.test(text)) return 'voucher-game';
+  if (/data|internet|kuota|freedom|xtra|aigo|flash|happy|bronnet|bronet|edukasi|ilmupedia|ketengan|gb\b|mb\b/.test(text)) return 'paket-data';
+
+  return 'pulsa';
+}
+
+export function isInternalDigiflazzProduct(name: string, sku: string) {
+  const text = `${name} ${sku}`.toLowerCase();
+  return /cek status|cek hutang/.test(text);
+}
+
+export function isStorefrontPulsaBrand(brand?: string) {
+  return /^(TELKOMSEL|INDOSAT|XL|AXIS|TRI|THREE|SMARTFREN|by\.U)$/i.test(String(brand || '').trim());
+}

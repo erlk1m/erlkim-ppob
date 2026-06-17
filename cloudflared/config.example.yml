@@ -1,0 +1,37 @@
+# Cloudflare Tunnel config for ERLKIM PPOB local VPS
+# Copy to: /etc/cloudflared/config.yml
+# Replace TUNNEL_ID and credentials-file path with your real tunnel data.
+
+tunnel: TUNNEL_ID
+credentials-file: /etc/cloudflared/TUNNEL_ID.json
+
+# Optional but useful for debugging
+logfile: /var/log/cloudflared/erlkim-tunnel.log
+loglevel: info
+
+# Public hostnames -> local services
+# Cloudflare edge handles public HTTPS. Origin can stay HTTP on localhost.
+ingress:
+  - hostname: api.erlkim.web.id
+    service: http://127.0.0.1:3001
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      httpHostHeader: api.erlkim.web.id
+
+  - hostname: store.erlkim.web.id
+    service: http://127.0.0.1:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      httpHostHeader: store.erlkim.web.id
+
+  - hostname: admin.erlkim.web.id
+    service: http://127.0.0.1:3333
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      httpHostHeader: admin.erlkim.web.id
+
+  # Fallback: reject unknown hostnames
+  - service: http_status:404

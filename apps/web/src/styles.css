@@ -1,0 +1,118 @@
+
+.qrisBox {
+  gap: 12px;
+}
+
+.qrisBox img {
+  width: min(320px, 100%);
+  aspect-ratio: 1 / 1;
+  padding: 12px;
+  border: 3px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+.qrisBox details {
+  display: grid;
+  gap: 8px;
+}
+
+.qrisBox summary {
+  cursor: pointer;
+  font-weight: 900;
+  color: var(--text);
+}
+
+.qrisFallback {
+  padding: 14px;
+  border: 3px dashed var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.invoiceGridFull {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.invoiceGridFull strong {
+  overflow-wrap: anywhere;
+}
+
+.invoiceGridFull {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.invoiceGridFull strong,
+.invoiceGridFull small {
+  overflow-wrap: anywhere;
+}
+
+.invoiceGridFull small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.eventList {
+  display: grid;
+  gap: 8px;
+}
+
+.eventItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.eventItem span {
+  font-weight: 900;
+}
+
+.eventItem small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.invoiceGridFull {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.invoiceGridFull strong,
+.invoiceGridFull small {
+  overflow-wrap: anywhere;
+}
+
+.invoiceGridFull small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.eventList {
+  display: grid;
+  gap: 8px;
+}
+
+.eventItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.eventItem span {
+  font-weight: 900;
+}
+
+.eventItem small {
+  color: var(--muted);
+  font-weight: 800;
+}

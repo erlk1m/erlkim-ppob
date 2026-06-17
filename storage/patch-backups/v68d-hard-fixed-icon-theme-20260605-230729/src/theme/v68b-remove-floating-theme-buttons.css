@@ -1,0 +1,9 @@
+#v68-theme-toggle {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html[data-erlkim-theme="halloween"] body {
+  padding-bottom: 0 !important;
+}

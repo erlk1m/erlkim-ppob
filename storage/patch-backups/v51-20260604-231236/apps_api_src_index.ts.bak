@@ -1,0 +1,907 @@
+import dotenv from 'dotenv';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+dotenv.config({
+  path: resolve(__dirname, '../../../.env')
+});
+
+import cors from 'cors';
+import express from 'express';
+import { DigiflazzClient } from './digiflazz.js';
+import { MidtransClient, mapMidtransPaymentStatus } from './midtrans.js';
+import { JsonStore } from './store.js';
+import { clientIp, createInvoice, createRefId, ipAllowed, isFinalOrderStatus, mapProviderStatus, maskCustomerName, maskCustomerNo, nowIso, requireString, verifyDigiflazzWebhookSignature } from './utils.js';
+import { DIGIFLAZZ_BILLER_FIELD_MAP, DIGIFLAZZ_COMMANDS, DIGIFLAZZ_ENDPOINTS, DIGIFLAZZ_RESPONSE_CODES, DIGIFLAZZ_TEST_CASES, DIGIFLAZZ_TESTING_SKU_ALIAS, DIGIFLAZZ_WEBHOOK, responseCodeInfo } from './digiflazz-mapping.js';
+
+const app = express();
+
+// v32: sanitize public store order response after payment is final.
+// Keep Midtrans redirect/token only while the invoice is still payable.
+app.use((req, res, next) => {
+  try {
+    if (!String(req.path || '').startsWith('/api/store/orders/')) return next();
+    const originalJson = res.json.bind(res);
+    res.json = (body) => {
+      try {
+        const finalPaymentStatuses = new Set(['paid', 'expired', 'canceled', 'cancelled', 'failed']);
+        const order = body && body.data && body.data.order;
+        if (order) {
+          const paymentStatus = String(order.paymentStatus || '').toLowerCase();
+          const orderStatus = String(order.orderStatus || '').toLowerCase();
+          const midtransStatus = String(order.midtransStatus || '').toLowerCase();
+          const isFinal = finalPaymentStatuses.has(paymentStatus)
+            || ['success', 'canceled', 'cancelled', 'failed'].includes(orderStatus)
+            || ['settlement', 'capture', 'expire', 'deny', 'cancel', 'failure'].includes(midtransStatus);
+          if (isFinal) {
+            delete order.midtransToken;
+            delete order.midtransRedirectUrl;
+          }
+        }
+        if (body && body.data && Array.isArray(body.data.events)) {
+          body.data.events = body.data.events.map((ev) => {
+            if (ev && ev.payload) {
+              const p = ev.payload;
+              const ps = String(p.paymentStatus || '').toLowerCase();
+              const os = String(p.orderStatus || '').toLowerCase();
+              const ms = String(p.midtransStatus || '').toLowerCase();
+              const eventFinal = finalPaymentStatuses.has(ps)
+                || ['success', 'canceled', 'cancelled', 'failed'].includes(os)
+                || ['settlement', 'capture', 'expire', 'deny', 'cancel', 'failure'].includes(ms);
+              if (eventFinal) {
+                delete p.midtransToken;
+                delete p.midtransRedirectUrl;
+              }
+            }
+            return ev;
+          });
+        }
+      } catch (_) {}
+      return originalJson(body);
+    };
+    return next();
+  } catch (_) {
+    return next();
+  }
+});
+
+
+
+// v31 public invoice sanitizer: keep public invoice safe, admin remains full.
+function v31MaskName(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => {
+      if (part.length <= 2) return '*'.repeat(part.length);
+      return part.slice(0, 5) + '****';
+    })
+    .join(' ');
+}
+
+function v31MaskCustomerNo(value) {
+  const raw = String(value || '');
+  if (raw.length <= 6) return raw ? raw[0] + '***' : raw;
+  return raw.slice(0, 5) + 'XXX' + raw.slice(-3);
+}
+
+function v31SanitizePublicValue(value) {
+  if (Array.isArray(value)) return value.map(v31SanitizePublicValue).filter((item) => item !== undefined);
+  if (!value || typeof value !== 'object') return value;
+
+  const blocked = new Set([
+    'rawMidtransResponse',
+    'rawProviderResponse',
+    'signature_key',
+    'va_number',
+    'va_numbers',
+    'payment_amounts',
+    'customer_details',
+    'customer_no',
+    'customerNo',
+    'phone',
+    'full_name',
+    'merchant_id',
+    'server_key',
+    'serverKey',
+    'apiKey',
+    'api_key',
+  ]);
+
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (blocked.has(key)) continue;
+
+    if (key === 'customerName' || key === 'customer_name' || key === 'fullName') {
+      out[key] = v31MaskName(val);
+      continue;
+    }
+
+    if (key === 'customerNoMasked' || key === 'customerNameMasked') {
+      out[key] = val;
+      continue;
+    }
+
+    if (/token/i.test(key) && key !== 'midtransToken') continue;
+    out[key] = v31SanitizePublicValue(val);
+  }
+  return out;
+}
+
+function v31SanitizePublicOrderResponse(body) {
+  if (!body || typeof body !== 'object') return body;
+  const cloned = v31SanitizePublicValue(body);
+
+  const order = cloned && cloned.data && cloned.data.order;
+  if (order && typeof order === 'object') {
+    if (order.customerNo && !order.customerNoMasked) order.customerNoMasked = v31MaskCustomerNo(order.customerNo);
+    delete order.customerNo;
+    if (order.customerName && !order.customerNameMasked) order.customerNameMasked = v31MaskName(order.customerName);
+    if (order.customerNameMasked) order.customerName = order.customerNameMasked;
+  }
+
+  if (cloned && cloned.data && Array.isArray(cloned.data.events)) {
+    cloned.data.events = cloned.data.events.map((event) => {
+      const safeEvent = v31SanitizePublicValue(event);
+      if (safeEvent && safeEvent.payload) safeEvent.payload = v31SanitizePublicValue(safeEvent.payload);
+      return safeEvent;
+    });
+  }
+
+  return cloned;
+}
+
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (req.method === 'GET' && /^\/api\/store\/orders\//.test(req.path || req.url || '')) {
+      return originalJson(v31SanitizePublicOrderResponse(body));
+    }
+    return originalJson(body);
+  };
+  next();
+});
+// end v31 public invoice sanitizer
+const store = new JsonStore();
+const digiflazz = new DigiflazzClient((direction, action, payload) => store.addProviderLog(direction, action, payload));
+const midtrans = new MidtransClient((type, payload) => store.addPaymentLog(type, payload));
+const port = Number(process.env.API_PORT || 3001);
+const allowedOrigins = String(
+  process.env.CORS_ORIGINS ||
+  [process.env.WEB_ORIGIN || 'http://localhost:3000', process.env.ADMIN_ORIGIN || 'http://localhost:3333'].join(',')
+).split(',').map((origin) => origin.trim()).filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  credentials: true
+}));
+
+// v33 CORS error normalizer: avoid HTTP 500 for disallowed browser origins
+app.use((err, req, res, next) => {
+  const msg = String(err && err.message ? err.message : '');
+  if (err && /cors|origin/i.test(msg)) {
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    return res.status(403).json({ ok: false, message: 'CORS origin not allowed' });
+  }
+  return next(err);
+});
+// end v33 CORS error normalizer
+
+app.set('trust proxy', true);
+app.use(express.json({
+  limit: '1mb',
+  verify(req, _res, buf) {
+    (req as any).rawBody = buf.toString('utf8');
+  }
+}));
+
+function ok(data: any = null, message?: string) {
+  return { ok: true, data, message };
+}
+
+function asSingleParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] || '';
+  return value || '';
+}
+
+function isMidtransPaymentMethod(paymentMethod: any) {
+  const id = String(paymentMethod?.id || '').toLowerCase();
+  const provider = String(paymentMethod?.provider || '').toLowerCase();
+  return provider === 'midtrans' || id.includes('midtrans');
+}
+
+function publicOrder(order: any) {
+  if (!order) return order;
+  const safe = { ...order };
+  if (safe.customerName) {
+    safe.customerNameMasked = maskCustomerName(safe.customerName);
+    safe.customerName = safe.customerNameMasked;
+  }
+  delete safe.customerNo;
+  delete safe.rawProviderResponse;
+  delete safe.rawMidtransResponse;
+  return safe;
+}
+
+function publicInquiry(inquiry: any) {
+  if (!inquiry) return inquiry;
+  const safe = { ...inquiry };
+  safe.customerNameMasked = maskCustomerName(inquiry.customerName);
+  safe.customerName = safe.customerNameMasked;
+  delete safe.customerNo;
+  delete safe.rawProviderResponse;
+  return safe;
+}
+
+async function createMidtransPayment(order: any, paymentMethod: any, eventName = 'midtrans-payment-created') {
+  const payment = await midtrans.createSnapTransaction(order);
+  const patched = store.updateOrder(order.invoice, {
+    paymentMethod: paymentMethod.id,
+    paymentProvider: 'midtrans',
+    midtransOrderId: order.invoice,
+    midtransToken: payment.token,
+    midtransRedirectUrl: payment.redirect_url,
+    midtransStatus: 'payment_created'
+  }, eventName);
+  return { order: patched, midtrans: payment };
+}
+
+async function sendPaidOrderToProvider(order: any, eventName = 'provider-transaction', testing: any = true) {
+  const processingOrder = store.updateOrder(order.invoice, {
+    orderStatus: 'processing',
+    providerStatus: 'sending_to_provider'
+  }, eventName === 'provider-resend' ? 'provider-resend' : 'midtrans-paid');
+
+  const result = processingOrder.type === 'postpaid'
+    ? await digiflazz.postpaidPayment({ buyerSkuCode: processingOrder.buyerSkuCode, customerNo: processingOrder.customerNo, refId: processingOrder.refId, testing })
+    : await digiflazz.prepaidTopup({ buyerSkuCode: processingOrder.buyerSkuCode, customerNo: processingOrder.customerNo, refId: processingOrder.refId, testing });
+
+  return applyProviderResult(processingOrder.invoice, result, eventName);
+}
+
+function adminOnly(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = String(req.headers.authorization || '').trim();
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const xAdminToken = String(req.headers['x-admin-token'] || '').trim();
+  const xApiKey = String(req.headers['x-api-key'] || '').trim();
+  const queryToken = String((req.query as any)?.token || '').trim();
+  const submittedToken = bearerToken || xAdminToken || xApiKey || queryToken;
+
+  const configuredTokens = [
+    process.env.ADMIN_TOKEN,
+    process.env.ADMIN_API_TOKEN,
+    process.env.ADMIN_SECRET,
+    "erlkim-admin-2026"
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  if (!submittedToken || !configuredTokens.includes(submittedToken)) {
+    return res.status(401).json({ ok: false, message: 'Admin token tidak valid' });
+  }
+  return next();
+}
+app.get('/api/health', (_req, res) => res.json(ok({ status: 'ok', service: 'erlkim-ppob-api', time: nowIso() })));
+app.get('/health', (_req, res) => res.json(ok({ status: 'ok', service: 'erlkim-ppob-api', time: nowIso() })));
+app.get('/up', (_req, res) => res.json(ok({ status: 'ok', service: 'erlkim-ppob-api', time: nowIso() })));
+// ERLKIM V35 PUBLIC ENVIRONMENT BADGE
+app.get('/api/settings/public', (_req, res) => {
+  const settings: any = store.settingsPublic();
+  const site: any = store.data.siteSettings || {};
+  res.json(ok({
+    ...settings,
+    environmentBadgeEnabled: Boolean(site.environmentBadgeEnabled),
+    environmentBadgeText: site.environmentBadgeText || 'Development Testing Mode',
+    environmentBadgeDescription: site.environmentBadgeDescription || 'Mode testing Digiflazz aktif. Gunakan nomor test-case untuk simulasi transaksi.',
+    environmentBadgeVariant: site.environmentBadgeVariant || 'warning',
+    environmentBadgeShowOnInvoice: site.environmentBadgeShowOnInvoice !== false,
+    maintenanceMode: Boolean(site.maintenanceMode),
+    maintenanceTitle: site.maintenanceTitle || 'Web Sedang Maintenance',
+    maintenanceMessage: site.maintenanceMessage || 'Kami sedang melakukan perawatan sistem agar layanan PPOB lebih stabil dan aman.',
+    maintenanceEta: site.maintenanceEta || 'Silakan cek kembali beberapa saat lagi.',
+    maintenanceWhatsapp: site.maintenanceWhatsapp || site.whatsappNumber || ''
+  }));
+});
+app.get('/api/categories', (req, res) => res.json(ok(store.categories(req.query))));
+app.get('/api/products', (req, res) => res.json(ok(store.products(req.query))));
+app.get('/api/products/:id', (req, res) => {
+  const product = store.productById(asSingleParam(req.params.id));
+  if (!product) return res.status(404).json({ ok: false, message: 'Produk tidak ditemukan' });
+  res.json(ok(product));
+});
+app.get('/api/payment-methods', (_req, res) => res.json(ok(store.data.paymentMethods.filter((m: any) => m.isEnabled))));
+
+app.post('/api/store/orders', async (req, res, next) => {
+  try {
+    const productId = requireString(req.body.productId || req.body.buyerSkuCode, 'productId');
+    const customerNo = requireString(req.body.customerNo, 'customerNo');
+    const paymentMethodId = requireString(req.body.paymentMethodId || req.body.paymentMethod || 'manual-qris', 'paymentMethodId');
+    const product = store.productById(productId);
+    if (!product || product.type !== 'prepaid' || !product.isActive) return res.status(400).json({ ok: false, message: 'Produk prepaid tidak valid atau nonaktif' });
+    const paymentMethod = store.paymentMethod(paymentMethodId);
+    if (!paymentMethod) return res.status(400).json({ ok: false, message: 'Payment method tidak valid atau nonaktif' });
+    const invoice = createInvoice();
+    const refId = createRefId('PRE');
+    const order = {
+      id: invoice,
+      invoice,
+      refId,
+      type: 'prepaid',
+      productId: product.id,
+      productName: product.name,
+      buyerSkuCode: product.buyerSkuCode,
+      customerNo,
+      customerNoMasked: maskCustomerNo(customerNo),
+      amount: product.sellingPrice,
+      adminFee: paymentMethod.adminFee,
+      totalAmount: product.sellingPrice + paymentMethod.adminFee,
+      paymentMethod: paymentMethod.id,
+      paymentStatus: 'unpaid',
+      orderStatus: 'pending',
+      providerStatus: 'waiting_payment',
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    store.addOrder(order);
+    store.addPaymentLog('invoice-created', { invoice, paymentMethod: paymentMethod.id, totalAmount: order.totalAmount });
+    if (isMidtransPaymentMethod(paymentMethod)) {
+      const created = await createMidtransPayment(order, paymentMethod);
+      return res.status(201).json(ok({ order: publicOrder(created.order), paymentMethod, midtrans: created.midtrans }));
+    }
+    res.status(201).json(ok({ order: publicOrder(order), paymentMethod }));
+  } catch (error) { next(error); }
+});
+
+
+// v33 public invoice response safety middleware
+const ERLKIM_PUBLIC_FINAL_PAYMENT_STATUSES = new Set(['paid', 'expired', 'canceled', 'cancelled', 'failed', 'refunded']);
+const ERLKIM_PUBLIC_SENSITIVE_KEYS = new Set([
+  'rawMidtransResponse',
+  'rawProviderResponse',
+  'signature_key',
+  'va_number',
+  'va_numbers',
+  'customer_no',
+  'customerNo',
+  'customer_details',
+  'merchant_id',
+  'full_name',
+]);
+function erlkPublicInvoiceIsFinal(value) {
+  const status = String(value?.data?.order?.paymentStatus || value?.order?.paymentStatus || '').toLowerCase();
+  return ERLKIM_PUBLIC_FINAL_PAYMENT_STATUSES.has(status);
+}
+function erlkSanitizePublicInvoiceValue(value, opts = {}) {
+  const finalPayment = Boolean((opts as any).finalPayment);
+  const inEvents = Boolean((opts as any).inEvents);
+  if (Array.isArray(value)) {
+    return value.map((item) => erlkSanitizePublicInvoiceValue(item, opts));
+  }
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, child] of Object.entries(value)) {
+    const nextInEvents = inEvents || key === 'events';
+    if (ERLKIM_PUBLIC_SENSITIVE_KEYS.has(key)) continue;
+    if ((key === 'midtransToken' || key === 'midtransRedirectUrl') && (finalPayment || inEvents)) continue;
+    out[key] = erlkSanitizePublicInvoiceValue(child, { finalPayment, inEvents: nextInEvents });
+  }
+  return out;
+}
+function erlkSanitizePublicInvoiceResponse(body) {
+  const finalPayment = erlkPublicInvoiceIsFinal(body);
+  return erlkSanitizePublicInvoiceValue(body, { finalPayment, inEvents: false });
+}
+app.use('/api/store/orders', (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => originalJson(erlkSanitizePublicInvoiceResponse(body));
+  next();
+});
+// end v33 public invoice response safety middleware
+
+app.get('/api/store/orders/:invoice', (req, res) => {
+  const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+  if (!order) return res.status(404).json({ ok: false, message: 'Invoice tidak ditemukan' });
+  const events = (store.data.orderEvents || []).filter((e: any) => e.invoice === order.invoice).slice(0, 20);
+  const paymentMethodRaw = store.data.paymentMethods.find((m: any) =>
+    m.id === order.paymentMethod || m.provider === order.paymentMethod
+  );
+
+  const paymentMethod = paymentMethodRaw ? {
+    id: paymentMethodRaw.id,
+    provider: paymentMethodRaw.provider,
+    name: paymentMethodRaw.name,
+    merchantName: paymentMethodRaw.merchantName,
+    adminFee: paymentMethodRaw.adminFee,
+    qrisImageUrl: paymentMethodRaw.qrisImageUrl,
+    qrisPayload: paymentMethodRaw.qrisPayload,
+    isEnabled: paymentMethodRaw.isEnabled,
+    environment: paymentMethodRaw.environment
+  } : null;
+
+  res.json(ok({ order: publicOrder(order), events, paymentMethod }));
+});
+
+app.post('/api/store/orders/:invoice/check-status', async (req, res, next) => {
+  try {
+    const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+    if (!order) return res.status(404).json({ ok: false, message: 'Invoice tidak ditemukan' });
+    if (order.paymentStatus !== 'paid') return res.json(ok({ order: publicOrder(order) }, 'Pembayaran belum paid, transaksi belum dikirim ke provider'));
+    if (isFinalOrderStatus(order.orderStatus)) return res.json(ok({ order: publicOrder(order) }, 'Order sudah final'));
+    const result = order.type === 'postpaid'
+      ? await digiflazz.postpaidCheckStatus({ buyerSkuCode: order.buyerSkuCode, customerNo: order.customerNo, refId: order.refId })
+      : await digiflazz.prepaidCheckStatus({ buyerSkuCode: order.buyerSkuCode, customerNo: order.customerNo, refId: order.refId });
+    const updated = applyProviderResult(order.invoice, result);
+    res.json(ok(publicOrder(updated)));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/store/bills/inquiry', async (req, res, next) => {
+  try {
+    const buyerSkuCode = requireString(req.body.buyerSkuCode, 'buyerSkuCode');
+    const customerNo = requireString(req.body.customerNo, 'customerNo');
+    const refId = req.body.refId ? String(req.body.refId) : createRefId('PASCA');
+    const result = await digiflazz.postpaidInquiry({ buyerSkuCode, customerNo, refId, testing: req.body.testing ?? true });
+    const data = result.data || result;
+    const inquiry = {
+      id: refId,
+      refId,
+      trId: data.tr_id || refId,
+      buyerSkuCode,
+      customerNo,
+      customerNoMasked: maskCustomerNo(customerNo),
+      customerName: data.customer_name || data.name || '',
+      adminFee: Number(data.admin || 0),
+      price: Number(data.price || 0),
+      sellingPrice: Number(data.selling_price || data.price || 0),
+      totalAmount: Number(data.selling_price || data.price || 0) + Number(data.admin || 0),
+      providerRc: data.rc,
+      providerStatus: data.status,
+      providerMessage: data.message,
+      rawProviderResponse: data,
+      createdAt: nowIso()
+    };
+    store.data.postpaidInquiries.unshift(inquiry);
+    store.save();
+    res.json(ok(publicInquiry(inquiry)));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/store/bills/order', async (req, res, next) => {
+  try {
+    const refId = requireString(req.body.refId, 'refId');
+    const paymentMethodId = requireString(req.body.paymentMethodId || req.body.paymentMethod || 'manual-qris', 'paymentMethodId');
+    const inquiry = store.data.postpaidInquiries.find((x: any) => x.refId === refId || x.trId === refId);
+    if (!inquiry) return res.status(404).json({ ok: false, message: 'Inquiry tagihan tidak ditemukan. Lakukan cek tagihan dulu.' });
+    const paymentMethod = store.paymentMethod(paymentMethodId);
+    if (!paymentMethod) return res.status(400).json({ ok: false, message: 'Payment method tidak valid atau nonaktif' });
+    const product = store.data.products.find((p: any) => p.buyerSkuCode === inquiry.buyerSkuCode) || { id: undefined, name: inquiry.buyerSkuCode };
+    const invoice = createInvoice('BILL');
+    const order = {
+      id: invoice,
+      invoice,
+      refId: inquiry.trId || inquiry.refId,
+      type: 'postpaid',
+      productId: product.id,
+      productName: product.name || inquiry.buyerSkuCode,
+      buyerSkuCode: inquiry.buyerSkuCode,
+      customerNo: inquiry.customerNo,
+      customerNoMasked: inquiry.customerNoMasked,
+      customerName: inquiry.customerName,
+      amount: Number(inquiry.totalAmount || inquiry.sellingPrice || 0),
+      providerAdminFee: Number(inquiry.adminFee || 0),
+      providerSellingPrice: Number(inquiry.sellingPrice || 0),
+      adminFee: Number(paymentMethod.adminFee || 0),
+      totalAmount: Number(inquiry.totalAmount || inquiry.sellingPrice || 0) + Number(paymentMethod.adminFee || 0),
+      paymentMethod: paymentMethod.id,
+      paymentStatus: 'unpaid',
+      orderStatus: 'pending',
+      providerStatus: 'waiting_payment',
+      rawProviderResponse: inquiry.rawProviderResponse,
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    store.addOrder(order);
+    store.addPaymentLog('postpaid-invoice-created', { invoice, refId: inquiry.refId, paymentMethod: paymentMethod.id, totalAmount: order.totalAmount });
+    if (isMidtransPaymentMethod(paymentMethod)) {
+      const created = await createMidtransPayment(order, paymentMethod);
+      return res.status(201).json(ok({ order: publicOrder(created.order), paymentMethod, midtrans: created.midtrans }));
+    }
+    res.status(201).json(ok({ order: publicOrder(order), paymentMethod }));
+  } catch (error) { next(error); }
+});
+
+
+app.get('/api/admin/payments/midtrans/status', adminOnly, (_req, res) => res.json(ok(midtrans.status())));
+
+app.post('/api/store/orders/:invoice/pay/midtrans', async (req, res, next) => {
+  try {
+    const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+    if (!order) return res.status(404).json({ ok: false, message: 'Invoice tidak ditemukan' });
+    if (order.paymentStatus === 'paid') return res.status(409).json({ ok: false, message: 'Invoice sudah paid' });
+    const paymentMethod = store.paymentMethod('midtrans-snap') || { id: 'midtrans-snap', provider: 'midtrans' };
+    const created = await createMidtransPayment(order, paymentMethod);
+    res.json(ok({ order: publicOrder(created.order), midtrans: created.midtrans }));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/payment/midtrans/webhook', async (req, res, next) => {
+  try {
+    store.addWebhookLog('midtrans', { body: req.body });
+    if (!midtrans.verifyNotification(req.body)) {
+      store.addPaymentLog('midtrans-signature-rejected', { orderId: req.body?.order_id, transactionStatus: req.body?.transaction_status });
+      return res.status(401).json({ ok: false, message: 'Signature Midtrans tidak valid' });
+    }
+    const orderId = String(req.body?.order_id || '');
+    const order = store.orderByInvoice(orderId);
+    if (!order) return res.status(202).json(ok(null, 'Webhook Midtrans diterima, order belum ditemukan'));
+    const mapped = mapMidtransPaymentStatus(req.body);
+    const patch: any = {
+      paymentStatus: mapped.paymentStatus,
+      midtransStatus: mapped.midtransStatus,
+      midtransTransactionId: req.body?.transaction_id,
+      midtransPaymentType: req.body?.payment_type,
+      rawMidtransResponse: req.body
+    };
+    if (mapped.paymentStatus === 'paid') patch.paidAt = nowIso();
+    const paidOrder = store.updateOrder(order.invoice, patch, 'midtrans-webhook');
+    if (mapped.paymentStatus !== 'paid') return res.json(ok(paidOrder));
+    if (!paidOrder || isFinalOrderStatus(paidOrder.orderStatus)) return res.json(ok(paidOrder, 'Order sudah final'));
+    const updated = await sendPaidOrderToProvider(paidOrder, 'provider-transaction', req.body.testing ?? true);
+    res.json(ok(updated));
+  } catch (error) { next(error); }
+});
+
+// v30 compatibility alias: Midtrans dashboard may still point to the old callback URL.
+app.post('/api/payment-provider/callback/midtrans', async (req, res, next) => {
+  try {
+    store.addWebhookLog('midtrans', { body: req.body });
+    if (!midtrans.verifyNotification(req.body)) {
+      store.addPaymentLog('midtrans-signature-rejected', { orderId: req.body?.order_id, transactionStatus: req.body?.transaction_status });
+      return res.status(401).json({ ok: false, message: 'Signature Midtrans tidak valid' });
+    }
+    const orderId = String(req.body?.order_id || '');
+    const order = store.orderByInvoice(orderId);
+    if (!order) return res.status(202).json(ok(null, 'Webhook Midtrans diterima, order belum ditemukan'));
+    const mapped = mapMidtransPaymentStatus(req.body);
+    const patch: any = {
+      paymentStatus: mapped.paymentStatus,
+      midtransStatus: mapped.midtransStatus,
+      midtransTransactionId: req.body?.transaction_id,
+      midtransPaymentType: req.body?.payment_type,
+      rawMidtransResponse: req.body
+    };
+    if (mapped.paymentStatus === 'paid') patch.paidAt = nowIso();
+    const paidOrder = store.updateOrder(order.invoice, patch, 'midtrans-webhook');
+    if (mapped.paymentStatus !== 'paid') return res.json(ok(paidOrder));
+    if (!paidOrder || isFinalOrderStatus(paidOrder.orderStatus)) return res.json(ok(paidOrder, 'Order sudah final'));
+    const updated = await sendPaidOrderToProvider(paidOrder, 'provider-transaction', req.body.testing ?? true);
+    res.json(ok(updated));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/admin/orders/:invoice/check-midtrans', adminOnly, async (req, res, next) => {
+  try {
+    const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+    if (!order) return res.status(404).json({ ok: false, message: 'Invoice tidak ditemukan' });
+    if (order.paymentProvider !== 'midtrans' && !String(order.paymentMethod || '').includes('midtrans')) {
+      return res.status(400).json({ ok: false, message: 'Order ini bukan pembayaran Midtrans' });
+    }
+
+    const status = await midtrans.transactionStatus(order.midtransOrderId || order.invoice);
+    const mapped = mapMidtransPaymentStatus(status);
+
+    const paymentPatch: any = {
+      paymentStatus: mapped.paymentStatus,
+      midtransStatus: mapped.midtransStatus,
+      midtransTransactionId: status?.transaction_id,
+      midtransPaymentType: status?.payment_type,
+      rawMidtransResponse: status
+    };
+    if (mapped.paymentStatus === 'paid' && !order.paidAt) paymentPatch.paidAt = nowIso();
+
+    let updatedOrder = store.updateOrder(order.invoice, paymentPatch, 'midtrans-status-synced');
+
+    if (mapped.paymentStatus !== 'paid') {
+      return res.json(ok({ order: updatedOrder, midtrans: status }, 'Status Midtrans tersinkron, pembayaran belum paid'));
+    }
+
+    if (!updatedOrder) return res.status(404).json({ ok: false, message: 'Order tidak ditemukan setelah sinkron Midtrans' });
+
+    if (isFinalOrderStatus(updatedOrder.orderStatus)) {
+      return res.json(ok({ order: updatedOrder, midtrans: status }, 'Order sudah final'));
+    }
+
+    const finalOrder = await sendPaidOrderToProvider(updatedOrder, 'provider-transaction', req.body.testing ?? true);
+    res.json(ok({ order: finalOrder, midtrans: status }, 'Midtrans paid, transaksi dikirim ke Digiflazz'));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/provider/digiflazz/webhook', (req, res) => {
+  const rawBody = (req as any).rawBody || JSON.stringify(req.body || {});
+  const secret = process.env.DIGIFLAZZ_WEBHOOK_SECRET || '';
+  if (secret && !verifyDigiflazzWebhookSignature(req.headers['x-hub-signature'], rawBody, secret)) {
+    store.addWebhookLog('digiflazz-signature-rejected', { headers: { event: req.headers['x-digiflazz-event'], userAgent: req.headers['user-agent'] }, ip: clientIp(req) });
+    return res.status(401).json({ ok: false, message: 'Signature webhook Digiflazz tidak valid' });
+  }
+  const allowedIps = String(process.env.DIGIFLAZZ_ALLOWED_IPS || '').split(',').map((v) => v.trim()).filter(Boolean);
+  if (!ipAllowed(clientIp(req), allowedIps)) {
+    store.addWebhookLog('digiflazz-ip-rejected', { ip: clientIp(req), allowedIps });
+    return res.status(403).json({ ok: false, message: 'IP webhook Digiflazz tidak diizinkan' });
+  }
+  store.addWebhookLog('digiflazz', { headers: { event: req.headers['x-digiflazz-event'], userAgent: req.headers['user-agent'] }, body: req.body });
+  const payload = req.body?.data || req.body;
+  const refId = payload?.ref_id;
+  const order = store.data.orders.find((o: any) => o.refId === refId || o.invoice === refId);
+  if (!order) return res.status(202).json(ok(null, 'Webhook diterima, order belum ditemukan'));
+  if (isFinalOrderStatus(order.orderStatus)) return res.json(ok(order, 'Order final, webhook tidak menimpa status'));
+  const updated = applyProviderResult(order.invoice, { data: payload }, 'provider-webhook');
+  res.json(ok(updated));
+});
+
+app.post('/api/admin/auth/login', (req, res) => {
+  if (req.body.email === (process.env.ADMIN_EMAIL || 'admin@erlkim.local') && req.body.password === (process.env.ADMIN_PASSWORD || 'admin123')) {
+    return res.json(ok({ token: process.env.ADMIN_TOKEN || 'change-me-admin-token', admin: { email: req.body.email, name: 'Admin ERLKIM' } }));
+  }
+  return res.status(401).json({ ok: false, message: 'Email atau password salah' });
+});
+
+app.get('/api/admin/dashboard', adminOnly, (_req, res) => {
+  const orders = store.data.orders;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayOrders = orders.filter((o: any) => String(o.createdAt).startsWith(today));
+  res.json(ok({
+    totalToday: todayOrders.length,
+    success: orders.filter((o: any) => o.orderStatus === 'success').length,
+    pending: orders.filter((o: any) => ['pending', 'processing', 'need_check'].includes(o.orderStatus)).length,
+    omzet: orders.filter((o: any) => o.paymentStatus === 'paid').reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0),
+    provider: digiflazz.status(),
+    midtrans: midtrans.status(),
+    payment: store.data.paymentMethods.map((m: any) => ({ id: m.id, provider: m.provider, enabled: m.isEnabled })),
+    latestErrors: store.data.providerLogs.filter((l: any) => l.direction === 'error').slice(0, 5)
+  }));
+});
+
+app.get('/api/admin/orders', adminOnly, (req, res) => {
+  let orders = [...store.data.orders];
+  const q = String(req.query.q || '').toLowerCase();
+  if (q) orders = orders.filter((o: any) => [o.invoice, o.refId, o.customerNo, o.customerNoMasked, o.productName].some((v) => String(v).toLowerCase().includes(q)));
+  if (req.query.status) orders = orders.filter((o: any) => o.orderStatus === req.query.status || o.paymentStatus === req.query.status);
+  res.json(ok(orders.slice(0, Number(req.query.limit || 100))));
+});
+
+app.post('/api/admin/orders/:invoice/approve-payment', adminOnly, async (req, res, next) => {
+  try {
+    const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+    if (!order) return res.status(404).json({ ok: false, message: 'Order tidak ditemukan' });
+    if (order.paymentStatus === 'paid' && isFinalOrderStatus(order.orderStatus)) return res.json(ok(order, 'Order sudah final'));
+    const paidOrder = store.updateOrder(order.invoice, { paymentStatus: 'paid', paidAt: nowIso(), orderStatus: 'processing', providerStatus: 'sending_to_provider' }, 'payment-approved');
+    store.addPaymentLog('manual-qris-approved', { invoice: order.invoice, by: 'admin' });
+    const result = order.type === 'postpaid'
+      ? await digiflazz.postpaidPayment({ buyerSkuCode: order.buyerSkuCode, customerNo: order.customerNo, refId: order.refId, testing: req.body.testing ?? true })
+      : await digiflazz.prepaidTopup({ buyerSkuCode: order.buyerSkuCode, customerNo: order.customerNo, refId: order.refId, testing: req.body.testing ?? true });
+    const updated = applyProviderResult(paidOrder.invoice, result, 'provider-transaction');
+    res.json(ok(updated));
+  } catch (error) { next(error); }
+});
+
+
+app.post('/api/admin/orders/:invoice/send-provider', adminOnly, async (req, res, next) => {
+  try {
+    const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+    if (!order) return res.status(404).json({ ok: false, message: 'Order tidak ditemukan' });
+    if (order.paymentStatus !== 'paid') return res.status(400).json({ ok: false, message: 'Order belum paid' });
+    if (isFinalOrderStatus(order.orderStatus)) return res.json(ok(order, 'Order sudah final'));
+    const updated = await sendPaidOrderToProvider(order, 'provider-resend', req.body.testing ?? true);
+    res.json(ok(updated));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/admin/orders/:invoice/cancel', adminOnly, (req, res) => {
+  const order = store.orderByInvoice(asSingleParam(req.params.invoice));
+  if (!order) return res.status(404).json({ ok: false, message: 'Order tidak ditemukan' });
+  if (order.orderStatus === 'success') return res.status(409).json({ ok: false, message: 'Order sukses tidak boleh dibatalkan' });
+  const updated = store.updateOrder(order.invoice, { paymentStatus: 'canceled', orderStatus: 'canceled', providerStatus: 'canceled_by_admin' }, 'order-canceled');
+  res.json(ok(updated));
+});
+
+app.get('/api/admin/products', adminOnly, (req, res) => res.json(ok(store.products({ ...req.query, active: 'all' }))));
+app.post('/api/admin/products/sync', adminOnly, syncProducts);
+app.post('/api/admin/providers/digiflazz/sync-products', adminOnly, syncProducts);
+app.patch('/api/admin/products/:id', adminOnly, (req, res) => {
+  const product = store.productById(asSingleParam(req.params.id));
+  if (!product) return res.status(404).json({ ok: false, message: 'Produk tidak ditemukan' });
+  const allowed = ['isActive', 'isPopular', 'isFlashsale', 'sellingPrice', 'margin', 'categoryId', 'categorySlug', 'description'];
+  for (const key of allowed) if (key in req.body) product[key] = req.body[key];
+  product.updatedAt = nowIso();
+  store.save();
+  res.json(ok(product));
+});
+
+app.get('/api/admin/providers/digiflazz/status', adminOnly, (_req, res) => res.json(ok(digiflazz.status())));
+app.get('/api/admin/providers/digiflazz/mapping', adminOnly, (_req, res) => res.json(ok({
+  endpoints: DIGIFLAZZ_ENDPOINTS,
+  commands: DIGIFLAZZ_COMMANDS,
+  responseCodes: DIGIFLAZZ_RESPONSE_CODES,
+  webhook: DIGIFLAZZ_WEBHOOK,
+  testCases: DIGIFLAZZ_TEST_CASES,
+  testingSkuAlias: DIGIFLAZZ_TESTING_SKU_ALIAS,
+  billerFieldMap: DIGIFLAZZ_BILLER_FIELD_MAP
+})));
+
+app.get('/api/admin/providers/digiflazz/response-codes', adminOnly, (req, res) => {
+  const rc = req.query.rc ? String(req.query.rc) : '';
+  if (rc) return res.json(ok(responseCodeInfo(rc)));
+  return res.json(ok(DIGIFLAZZ_RESPONSE_CODES));
+});
+app.post('/api/admin/providers/digiflazz/inquiry-pln', adminOnly, async (req, res, next) => {
+  try {
+    const customerNo = requireString(req.body.customerNo || req.body.customer_no, 'customerNo');
+    res.json(ok(await digiflazz.inquiryPln({ customerNo })));
+  } catch (error) { next(error); }
+});
+app.post('/api/admin/providers/digiflazz/check-balance', adminOnly, async (_req, res, next) => {
+  try { res.json(ok(await digiflazz.checkBalance())); } catch (error) { next(error); }
+});
+app.get('/api/admin/payment-methods', adminOnly, (_req, res) => res.json(ok(store.data.paymentMethods)));
+app.patch('/api/admin/payment-methods/:id', adminOnly, (req, res) => {
+  const method = store.data.paymentMethods.find((m: any) => m.id === asSingleParam(req.params.id));
+  if (!method) return res.status(404).json({ ok: false, message: 'Payment method tidak ditemukan' });
+  Object.assign(method, req.body, { updatedAt: nowIso() });
+  store.save();
+  res.json(ok(method));
+});
+
+// ERLKIM V35 ADMIN ENVIRONMENT BADGE
+app.get('/api/admin/environment-badge', adminOnly, (_req, res) => {
+  const site: any = store.data.siteSettings || {};
+  res.json(ok({
+    environmentBadgeEnabled: Boolean(site.environmentBadgeEnabled),
+    environmentBadgeText: site.environmentBadgeText || 'Development Testing Mode',
+    environmentBadgeDescription: site.environmentBadgeDescription || 'Mode testing Digiflazz aktif. Gunakan nomor test-case untuk simulasi transaksi.',
+    environmentBadgeVariant: site.environmentBadgeVariant || 'warning',
+    environmentBadgeShowOnInvoice: site.environmentBadgeShowOnInvoice !== false
+  }));
+});
+
+app.post('/api/admin/environment-badge', adminOnly, (req, res) => {
+  const body: any = req.body || {};
+  const site: any = store.data.siteSettings || (store.data.siteSettings = {});
+
+  const toBool = (value: any, fallback: boolean) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.toLowerCase().trim();
+      if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+      if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+    }
+    return fallback;
+  };
+
+  site.environmentBadgeEnabled = toBool(body.environmentBadgeEnabled, Boolean(site.environmentBadgeEnabled));
+  site.environmentBadgeText = String(body.environmentBadgeText || site.environmentBadgeText || 'Development Testing Mode').slice(0, 80);
+  site.environmentBadgeDescription = String(body.environmentBadgeDescription || site.environmentBadgeDescription || 'Mode testing Digiflazz aktif. Gunakan nomor test-case untuk simulasi transaksi.').slice(0, 220);
+  site.environmentBadgeVariant = String(body.environmentBadgeVariant || site.environmentBadgeVariant || 'warning').slice(0, 30);
+  site.environmentBadgeShowOnInvoice = toBool(body.environmentBadgeShowOnInvoice, site.environmentBadgeShowOnInvoice !== false);
+  site.updatedAt = nowIso();
+
+  store.save();
+  res.json(ok({
+    environmentBadgeEnabled: Boolean(site.environmentBadgeEnabled),
+    environmentBadgeText: site.environmentBadgeText,
+    environmentBadgeDescription: site.environmentBadgeDescription,
+    environmentBadgeVariant: site.environmentBadgeVariant,
+    environmentBadgeShowOnInvoice: site.environmentBadgeShowOnInvoice !== false
+  }));
+});
+
+app.get('/api/admin/site-settings', adminOnly, (_req, res) => res.json(ok(store.data.siteSettings)));
+app.patch('/api/admin/site-settings', adminOnly, (req, res) => {
+  Object.assign(store.data.siteSettings, req.body, { updatedAt: nowIso() });
+  store.save();
+  res.json(ok(store.data.siteSettings));
+});
+app.get('/api/admin/logs/provider', adminOnly, (_req, res) => res.json(ok(store.data.providerLogs.slice(0, 100))));
+app.get('/api/admin/logs/payment', adminOnly, (_req, res) => res.json(ok(store.data.paymentLogs.slice(0, 100))));
+app.get('/api/admin/logs/webhook', adminOnly, (_req, res) => res.json(ok(store.data.webhookLogs.slice(0, 100))));
+app.post('/api/admin/maintenance/expire-pending', adminOnly, (_req, res) => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  let expired = 0;
+  for (const order of store.data.orders) {
+    if (order.paymentStatus === 'unpaid' && new Date(order.createdAt).getTime() < cutoff) {
+      order.paymentStatus = 'expired';
+      order.orderStatus = 'canceled';
+      order.updatedAt = nowIso();
+      expired++;
+    }
+  }
+  store.save();
+  res.json(ok({ expired }));
+});
+app.post('/api/admin/maintenance/check-processing', adminOnly, async (_req, res, next) => {
+  try {
+    const candidates = store.data.orders.filter((o: any) => o.paymentStatus === 'paid' && ['processing', 'need_check'].includes(o.orderStatus)).slice(0, 10);
+    const updated = [];
+    for (const order of candidates) {
+      const result = order.type === 'postpaid'
+        ? await digiflazz.postpaidCheckStatus({ buyerSkuCode: order.buyerSkuCode, customerNo: order.customerNo, refId: order.refId })
+        : await digiflazz.prepaidCheckStatus({ buyerSkuCode: order.buyerSkuCode, customerNo: order.customerNo, refId: order.refId });
+      updated.push(applyProviderResult(order.invoice, result, 'maintenance-check-processing'));
+    }
+    res.json(ok({ checked: candidates.length, updated }));
+  } catch (error) { next(error); }
+});
+
+async function syncProducts(_req: express.Request, res: express.Response, next: express.NextFunction) {
+  try {
+    const [prepaid, postpaid] = await Promise.all([digiflazz.priceList('prepaid'), digiflazz.priceList('postpaid')]);
+    const rawMapped = [
+      ...digiflazz.mapPriceListToProducts(postpaid, store.data.categories, 'postpaid'),
+      ...digiflazz.mapPriceListToProducts(prepaid, store.data.categories, 'prepaid')
+    ];
+
+    // Dedupe berdasarkan SKU. Prepaid diletakkan terakhir agar kalau API development
+    // mengembalikan SKU yang sama di pricelist pasca, kategori prepaid tetap menang.
+    const uniqueBySku = new Map<string, any>();
+    for (const item of rawMapped) {
+      uniqueBySku.set(String(item.buyerSkuCode).toLowerCase(), item);
+    }
+    const mapped = Array.from(uniqueBySku.values());
+
+    const previousBySku = new Map(store.data.products.map((p: any) => [String(p.buyerSkuCode).toLowerCase(), p]));
+    const localProducts = store.data.products.filter((p: any) => p.provider && p.provider !== 'digiflazz');
+
+    store.data.products = [
+      ...localProducts,
+      ...mapped.map((item: any) => {
+        const existing: any = previousBySku.get(String(item.buyerSkuCode).toLowerCase());
+        return {
+          ...item,
+          id: existing?.id || item.id,
+          isPopular: existing?.isPopular ?? item.isPopular,
+          isFlashsale: existing?.isFlashsale ?? item.isFlashsale
+        };
+      })
+    ];
+
+    store.save();
+    res.json(ok({
+      synced: true,
+      source: 'digiflazz',
+      totalRaw: rawMapped.length,
+      totalSynced: mapped.length,
+      total: store.data.products.length,
+      syncedAt: nowIso()
+    }));
+  } catch (error) { next(error); }
+}
+
+function applyProviderResult(invoice: string, result: any, eventName = 'provider-result') {
+  const data = result?.data || result || {};
+  const orderStatus = mapProviderStatus(data.status, data.rc);
+  const patch: any = {
+    orderStatus,
+    providerStatus: data.status || orderStatus,
+    providerRc: data.rc,
+    providerMessage: data.message,
+    sn: data.sn,
+    rawProviderResponse: data
+  };
+  if (orderStatus === 'success' || orderStatus === 'failed') patch.completedAt = nowIso();
+  return store.updateOrder(invoice, patch, eventName);
+}
+
+app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = error.statusCode || 500;
+  res.status(status).json({ ok: false, message: error.message || 'Internal server error', detail: error.payload });
+});
+
+app.listen(port, () => {
+  console.log(`ERLKIM PPOB API ready on http://localhost:${port}/api/health`);
+});

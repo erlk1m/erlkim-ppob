@@ -1,0 +1,44 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="360" fill="#FFFDF0"/>
+
+  <!-- dotted background -->
+  <defs>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="2" fill="#000000"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="360" fill="url(#dots)" opacity="0.18"/>
+
+  <!-- outer card -->
+  <rect x="36" y="34" width="1128" height="292" fill="#FFDE59" stroke="#000000" stroke-width="8"/>
+  <rect x="64" y="62" width="1072" height="236" fill="#8C52FF" stroke="#000000" stroke-width="7"/>
+
+  <!-- decorations -->
+  <circle cx="1018" cy="118" r="62" fill="#00FFFF" stroke="#000000" stroke-width="7"/>
+  <circle cx="1078" cy="235" r="42" fill="#FF90E8" stroke="#000000" stroke-width="7"/>
+  <rect x="898" y="212" width="150" height="48" fill="#00FF00" stroke="#000000" stroke-width="6" transform="rotate(-5 898 212)"/>
+  <text x="923" y="244" font-family="Arial Black, Arial, sans-serif" font-size="24" font-weight="900" fill="#000000">AMAN</text>
+
+  <!-- main title -->
+  <text x="105" y="126" font-family="Arial Black, Arial, sans-serif" font-size="54" font-weight="900" fill="#FFFFFF" stroke="#000000" stroke-width="2">
+    ERLKIM PULSA
+  </text>
+  <text x="105" y="194" font-family="Arial Black, Arial, sans-serif" font-size="66" font-weight="900" fill="#FFDE59" stroke="#000000" stroke-width="3">
+    TOPUP &amp; PPOB DIGITAL
+  </text>
+
+  <!-- subtitle -->
+  <text x="108" y="238" font-family="Arial, sans-serif" font-size="26" font-weight="800" fill="#FFFFFF">
+    Pulsa • Paket Data • Token PLN • E-Money • Game
+  </text>
+
+  <!-- badges -->
+  <rect x="108" y="262" width="160" height="42" fill="#00FFFF" stroke="#000000" stroke-width="5"/>
+  <text x="133" y="290" font-family="Arial Black, Arial, sans-serif" font-size="19" font-weight="900" fill="#000000">QRIS AKTIF</text>
+
+  <rect x="288" y="262" width="180" height="42" fill="#FF5757" stroke="#000000" stroke-width="5"/>
+  <text x="309" y="290" font-family="Arial Black, Arial, sans-serif" font-size="19" font-weight="900" fill="#FFFFFF">INVOICE REAL</text>
+
+  <rect x="488" y="262" width="150" height="42" fill="#00FF00" stroke="#000000" stroke-width="5"/>
+  <text x="522" y="290" font-family="Arial Black, Arial, sans-serif" font-size="19" font-weight="900" fill="#000000">API READY</text>
+</svg>
