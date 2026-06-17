@@ -74,7 +74,7 @@ fn brand_rank(product: &Product) -> usize {
 }
 
 fn extract_storefront_nominal(product: &Product) -> i32 {
-    let text = normalize_catalog_text(&product.name);
+    let _text = normalize_catalog_text(&product.name);
     // Simple naive nominal extractor (find first numeric sequence over 3 digits or matching logic)
     // We'll fall back to selling price which is usually good enough for ranking
     if let Some(price) = product.selling_price.into() {

@@ -1,6 +1,6 @@
 use md5::{Md5, Digest};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::env;
 
 #[derive(Clone)]
