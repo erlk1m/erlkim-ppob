@@ -8,6 +8,20 @@ Aplikasi PPOB (Payment Point Online Bank) berkecepatan tinggi yang dibangun meng
 - **🔄 Otomatisasi Penuh:** Transaksi diproses secara *real-time* via *Webhook* Digiflazz dan Midtrans.
 - **🛡️ Keamanan Ketat:** Validasi HMAC SHA-1 (Digiflazz) & SHA-512 (Midtrans) untuk menghindari transaksi palsu. Middleware *AdminAuth* untuk proteksi endpoint internal.
 
+## 📂 Struktur Folder
+Proyek ini menggunakan arsitektur *Monorepo* dengan pembagian sebagai berikut:
+```text
+erlkim-ppob/
+├── apps/
+│   ├── api-rust/      # Backend API Utama (Rust/Axum)
+│   ├── admin/         # Frontend Admin Panel (React/Vite)
+│   └── web/           # Frontend Toko Publik (React/Vite)
+├── scripts/           # Skrip utilitas untuk server (backup, deploy)
+├── nginx/             # Contoh konfigurasi Reverse Proxy Nginx
+├── cloudflared/       # Konfigurasi Cloudflare Tunnel
+├── .env.example       # Template variabel lingkungan/rahasia
+└── package.json       # Konfigurasi Monorepo (PNPM Workspaces)
+```
 ## 🛠️ Persyaratan Sistem (Prerequisites)
 Sebelum melakukan instalasi, pastikan sistem Anda sudah terpasang:
 - **Node.js** (v18+) & **PNPM** (Package Manager)
