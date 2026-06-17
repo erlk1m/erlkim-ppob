@@ -8,16 +8,13 @@ function resolveApiUrl() {
     const runtimeUrl = String((window as any).__ERLKIM_API_URL__ || '').trim().replace(/\/+$/, '');
     if (runtimeUrl) return runtimeUrl;
 
-    if (host === 'store.erlkim.web.id' || host === 'admin.erlkim.web.id' || host.endsWith('.erlkim.web.id')) {
-      return 'https://api.erlkim.web.id/api';
-    }
-
     if (host === 'localhost' || host === '127.0.0.1') {
       return envUrl || `${protocol}//${host}:3001/api`;
     }
   }
 
-  return envUrl || 'https://api.erlkim.web.id/api';
+  // Fallback to relative URL if environment variable is not provided
+  return envUrl || '/api';
 }
 
 const API_URL = resolveApiUrl();

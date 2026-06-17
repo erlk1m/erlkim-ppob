@@ -1,4 +1,4 @@
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || 'https://api.erlkim.web.id/api').replace(/\/+$/, '');
+const API_BASE = ((import.meta as any).env?.VITE_API_URL || '/api').replace(/\/+$/, '');
 
 type BadgeSettings = {
   environmentBadgeEnabled?: boolean;

@@ -377,7 +377,7 @@ function copyAdminText(value: any) {
 function customerInvoiceUrl(invoice: any) {
   const safeInvoice = String(invoice ?? '').trim().replace(/[^a-zA-Z0-9-]/g, '');
   if (!safeInvoice) return '';
-  return `https://store.erlkim.web.id/invoice/${encodeURIComponent(safeInvoice)}`;
+  return `/invoice/${encodeURIComponent(safeInvoice)}`;
 }
 
 function openCustomerInvoice(invoice: any) {
@@ -385,7 +385,7 @@ function openCustomerInvoice(invoice: any) {
   if (!safeInvoice || typeof window === 'undefined') return;
 
   window.open(
-    `https://store.erlkim.web.id/invoice/${encodeURIComponent(safeInvoice)}`,
+    `/invoice/${encodeURIComponent(safeInvoice)}`,
     '_blank',
     'noopener,noreferrer'
   );
@@ -1405,8 +1405,8 @@ function ContentView({ site, setSite, save, saveBadge }: any) {
   const previewBanner =
     previewBannerRaw.startsWith('http://') || previewBannerRaw.startsWith('https://')
       ? previewBannerRaw
-      : `https://store.erlkim.web.id${previewBannerRaw.startsWith('/') ? previewBannerRaw : `/${previewBannerRaw}`}`;
-  const previewFallbackBanner = 'https://store.erlkim.web.id/banners/home-banner.svg';
+      : `${previewBannerRaw.startsWith('/') ? previewBannerRaw : `/${previewBannerRaw}`}`;
+  const previewFallbackBanner = '/banners/home-banner.svg';
 
   return (
     <div className="panel contentWebRoot">
