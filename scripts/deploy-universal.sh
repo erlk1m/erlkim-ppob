@@ -35,7 +35,7 @@ if pm2 show ppob-api > /dev/null 2>&1; then
     pm2 restart ppob-api
 else
     echo "Starting ppob-api..."
-    pm2 start pnpm --name ppob-api -- --filter @erlkim-ppob/api exec tsx src/index.ts
+    pm2 start pnpm --name ppob-api -- --filter @my-ppob/api exec tsx src/index.ts
 fi
 
 # 2. PPOB Admin
@@ -44,7 +44,7 @@ if pm2 show ppob-admin > /dev/null 2>&1; then
     pm2 restart ppob-admin
 else
     echo "Starting ppob-admin..."
-    pm2 start bash --name ppob-admin -- -lc "pnpm --filter @erlkim-ppob/admin preview -- --host 0.0.0.0 --port 3333"
+    pm2 start bash --name ppob-admin -- -lc "pnpm --filter @my-ppob/admin preview -- --host 0.0.0.0 --port 3333"
 fi
 
 # 3. PPOB Web

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -u
-PROJECT="${PROJECT:-/var/www/erlkim-ppob-digiflazz}"
-API_URL="${API_URL:-https://api.erlkim.web.id}"
-TOKEN="$(cat /root/erlkim-admin-token-v24.txt 2>/dev/null || grep '^ADMIN_TOKEN=' "$PROJECT/.env" | cut -d= -f2- | tr -d '\r')"
+PROJECT="${PROJECT:-/var/www/my-ppob}"
+API_URL="${API_URL:-https://api.example.com}"
+TOKEN="$(cat /root/admin-admin-token-v24.txt 2>/dev/null || grep '^ADMIN_TOKEN=' "$PROJECT/.env" | cut -d= -f2- | tr -d '\r')"
 
 echo "== scheduler status =="
 pm2 describe ppob-scheduler 2>/dev/null | grep -E 'status|script path|exec cwd|restarts|uptime' || true

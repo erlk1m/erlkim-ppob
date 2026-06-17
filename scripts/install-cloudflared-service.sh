@@ -8,8 +8,8 @@ fi
 
 sudo mkdir -p /etc/cloudflared /var/log/cloudflared
 sudo chown -R root:root /etc/cloudflared
-sudo touch /var/log/cloudflared/erlkim-tunnel.log
-sudo chmod 644 /var/log/cloudflared/erlkim-tunnel.log
+sudo touch /var/log/cloudflared/admin-tunnel.log
+sudo chmod 644 /var/log/cloudflared/admin-tunnel.log
 
 if [ ! -f /etc/cloudflared/config.yml ]; then
   echo "File /etc/cloudflared/config.yml belum ada. Copy cloudflared/config.example.yml lalu edit TUNNEL_ID dan credentials-file."

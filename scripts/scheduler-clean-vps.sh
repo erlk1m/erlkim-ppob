@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -u
 
-PROJECT="${PROJECT:-/var/www/erlkim-ppob-digiflazz}"
-API_URL="${API_URL:-https://api.erlkim.web.id}"
+PROJECT="${PROJECT:-/var/www/my-ppob}"
+API_URL="${API_URL:-https://api.example.com}"
 INTERVAL_SECONDS="${SCHED_INTERVAL:-300}"
 SMOKE_INTERVAL_SECONDS="${SMOKE_INTERVAL:-3600}"
 LOG_FILE="${LOG_FILE:-$PROJECT/storage/logs/scheduler-clean.log}"
-TOKEN_FILE="${TOKEN_FILE:-/root/erlkim-admin-token-v24.txt}"
+TOKEN_FILE="${TOKEN_FILE:-/root/admin-admin-token-v24.txt}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-APP_DIR="/var/www/erlkim-ppob-digiflazz"
+APP_DIR="/var/www/my-ppob"
 BACKUP_DIR="${APP_DIR}/backups"
 ENV_FILE="${APP_DIR}/.env"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
