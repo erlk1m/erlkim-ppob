@@ -2,6 +2,12 @@
 
 Aplikasi PPOB (Payment Point Online Bank) berkecepatan tinggi yang dibangun menggunakan **Rust** (Backend) dan **React/Vite** (Frontend). Terintegrasi dengan **Digiflazz** (untuk pemrosesan produk digital otomatis) dan **Midtrans** (untuk gerbang pembayaran/Payment Gateway).
 
+## 📸 Tangkapan Layar (Demo)
+<div align="center">
+  <img src="docs/store_homepage.png" width="45%" alt="Store Homepage" />
+  <img src="docs/store_fullpage.png" width="45%" alt="Store Catalog" />
+</div>
+
 ## 🚀 Fitur Utama
 - **⚡ Super Cepat:** Backend ditulis dalam bahasa Rust (Axum + SQLx) memastikan latensi sangat rendah dan hemat memori.
 - **🎨 UI Modern:** Frontend (Toko Publik & Panel Admin) menggunakan React + TypeScript + Vite.
